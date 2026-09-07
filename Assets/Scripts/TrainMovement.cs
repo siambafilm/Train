@@ -2,24 +2,34 @@ using UnityEngine;
 
 public class TrainMovement : MonoBehaviour
 {
-    [Header("Настройки направления движения")]
-    [SerializeField] private Vector3 moveDirection = Vector3.forward; // По умолчанию едем по стрелке Forward (синяя стрелка в Unity)
+    [Header("Управление поворотом")]
+    public float currentYawSpeed = 0f; // Текущая скорость поворота (градусы в секунду)
 
     void Update()
     {
-        // 1. Берем текущую скорость из нашего скрипта рычага
         float speedKmh = TrainLever.Speed;
-
-        // 2. Переводим скорость из км/ч в метры в секунду (инженерная классика: делим на 3.6)
         float speedMs = speedKmh / 3.6f;
-
-        // 3. Рассчитываем смещение за этот кадр (скорость * время кадра)
         float distanceThisFrame = speedMs * Time.deltaTime;
 
-        // 4. Двигаем поезд в локальном пространстве вперед
-        // Использование TransformDirection позволяет поезду ехать туда, куда направлен его "нос" (даже если рельсы повернут)
-        Vector3 localMove = transform.TransformDirection(moveDirection) * distanceThisFrame;
+        // 1. Двигаем поезд строго туда, куда смотрит его СОБСТВЕННЫЙ нос (transform.forward)
+        transform.position += transform.forward * distanceThisFrame;
 
-        transform.position += localMove;
+        // 2. Вращаем поезд по горизонтали, если мы находимся на дуге поворота
+        // Скорость вращения умножается на скорость поезда, чтобы на стоянке поезд не крутился на месте
+        if (speedKmh > 0.1f)
+        {
+            transform.Rotate(Vector3.up * currentYawSpeed * Time.deltaTime * (speedKmh / 40f));
+        }
+    }
+
+    // Эти методы будут вызывать невидимые зоны-триггеры на рельсах
+    public void StartTurning(float turnDirection)
+    {
+        currentYawSpeed = turnDirection; // Например, 15f для поворота вправо, -15f для поворота влево
+    }
+
+    public void StopTurning()
+    {
+        currentYawSpeed = 0f; // Снова едем прямо
     }
 }
