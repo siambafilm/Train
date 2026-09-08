@@ -13,6 +13,20 @@ public class TrainLever : MonoBehaviour
     public static float Speed = 0f;
     public static string LeverMode = "�����";
 
+    // Находим общее количество прицепленных вагонов в цепочке
+    int GetTotalCarsCount()
+    {
+        int count = 1;
+        TrainCar current = FindFirstObjectByType<TrainMovement>().GetComponent<TrainCar>();
+        
+        while (current != null && current.attachedRearCar != null)
+        {
+            count++;
+            current = current.attachedRearCar; // Переходим к следующему вагону сзади
+        }
+        return count;
+    }
+
     void Update()
 {
     bool anyDoorOpen = TrainButton.LeftDoorsOpen || TrainButton.RightDoorsOpen;
