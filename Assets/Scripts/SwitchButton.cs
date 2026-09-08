@@ -4,19 +4,17 @@ public class SwitchButton : MonoBehaviour, IClickable
 {
     [SerializeField] private string buttonName = "TrackSwitch";
 
-    // Статическая переменная: true — направо, false — налево
-    public static bool SwitchDirectionRight = true; 
+    // Теперь это просто намерение машиниста: true — хочу направо, false — хочу налево
+    public static bool WantsToTurnRight = true; 
 
     public void OnClick()
     {
-        // Анимация кнопки
         transform.localPosition -= new Vector3(0, 0, 0.05f);
         Invoke(nameof(ResetButton), 0.2f);
 
-        // Инвертируем направление стрелки
-        SwitchDirectionRight = !SwitchDirectionRight;
+        WantsToTurnRight = !WantsToTurnRight;
         
-        Debug.Log($"[СТРЕЛКА] Направление переключено: {(SwitchDirectionRight ? "НАПРАВО" : "НАЛЕВО")}");
+        Debug.Log($"[ПУЛЬТ] Машинист выбрал направление для следующей стрелки: {(WantsToTurnRight ? "НАПРАВО" : "НАЛЕВО")}");
     }
 
     private void ResetButton()
