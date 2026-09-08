@@ -4,11 +4,11 @@ public class CabinController : MonoBehaviour
 {
     private Camera cam;
 
-    [Header("Настройки камеры")]
+    [Header("пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ")]
     [SerializeField] private float mouseSensitivity = 2f;
-    [SerializeField] private float verticalLookLimit = 60f; // Ограничение взгляда вверх/вниз
+    [SerializeField] private float verticalLookLimit = 60f; // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ/пїЅпїЅпїЅпїЅ
 
-    [Header("Настройки прицела (Точки)")]
+    [Header("пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅпїЅпїЅ)")]
     [SerializeField] private Color dotColor = Color.white;
     [SerializeField] private float dotSize = 4f;
 
@@ -19,34 +19,34 @@ public class CabinController : MonoBehaviour
     {
         cam = GetComponent<Camera>();
 
-        // Блокируем курсор
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Запоминаем стартовый поворот камеры, чтобы не было резкого прыжка при старте
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         rotationX = transform.localEulerAngles.x;
         rotationY = transform.localEulerAngles.y;
     }
 
     void Update()
     {
-        // 1. Полноценный обзор мышью во все стороны
+        // 1. пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         rotationY += Input.GetAxis("Mouse X") * mouseSensitivity;
         rotationX -= Input.GetAxis("Mouse Y") * mouseSensitivity;
 
-        // Ограничиваем взгляд по вертикали, чтобы нормально смотреть на пульт под ногами
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         rotationX = Mathf.Clamp(rotationX, -verticalLookLimit, verticalLookLimit);
 
-        // Применяем вращение
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         transform.localRotation = Quaternion.Euler(rotationX, rotationY, 0f);
 
-        // 2. Взаимодействие с кабиной (ЛКМ)
+        // 2. пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅ)
         if (Input.GetMouseButtonDown(0))
         {
             ProcessClick();
         }
 
-        // 3. Взаимодействие с рычагом через колесико мыши
+        // 3. пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ
         ProcessLeverScroll();
     }
 
@@ -55,13 +55,13 @@ public class CabinController : MonoBehaviour
         Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
         RaycastHit hit;
 
-        // Тестовый луч в окне Scene (виден во время игры, если включить Gizmos)
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅ Scene (пїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ Gizmos)
         Debug.DrawRay(ray.origin, ray.direction * 2.0f, Color.red, 1f);
 
         if (Physics.Raycast(ray, out hit, 5.0f))
         {
-            // ЭТА СТРОКА НАПИШЕТ, КУДА МЫ ПОПАЛИ:
-            Debug.Log($"Рейкаст попал в объект: {hit.collider.gameObject.name}");
+            // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ:
+            Debug.Log($"пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ: {hit.collider.gameObject.name}");
 
             IClickable clickable = hit.collider.GetComponent<IClickable>();
             if (clickable != null)
@@ -70,42 +70,43 @@ public class CabinController : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning($"На объекте {hit.collider.gameObject.name} НЕТ скрипта TrainButton!");
+                Debug.LogWarning($"пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ {hit.collider.gameObject.name} пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ TrainButton!");
             }
         }
         else
         {
-            Debug.Log("Кликнули, но луч ни во что не попал (слишком далеко или нет коллайдера)");
+            Debug.Log("пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅ пїЅпїЅпїЅ пїЅпїЅ пїЅпїЅ пїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ)");
         }
     }
 
     private void ProcessLeverScroll()
     {
+        // Р”РёСЃС‚Р°РЅС†РёСЏ РІР·Р°РёРјРѕРґРµР№СЃС‚РІРёСЏ вЂ” 5 РјРµС‚СЂРѕРІ
         Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
         RaycastHit hit;
 
-        if (Physics.Raycast(ray, out hit, 5.0f)) // Дистанция 5 метров, как у кнопок
+        if (Physics.Raycast(ray, out hit, 5.0f))
         {
-            // 1. Проверяем, крутится ли колесико вообще
             float scroll = Input.GetAxis("Mouse ScrollWheel");
-
+            
             if (scroll != 0f)
             {
-                // Этот лог покажет, видит ли Unity скролл мыши над объектом
-                Debug.Log($"Колесико крутится над объектом: {hit.collider.gameObject.name}. Скролл = {scroll}");
-
-                // 2. Ищем скрипт рычага
+                // 1. РџСЂРѕРІРµСЂСЏРµРј, СЃРјРѕС‚СЂРёРј Р»Рё РјС‹ РЅР° РіР»Р°РІРЅС‹Р№ Р Р«Р§РђР“ Р“РђР—Рђ
                 TrainLever lever = hit.collider.GetComponent<TrainLever>();
-
                 if (lever != null)
                 {
-                    if (scroll > 0f) lever.ChangePosition(1);
-                    if (scroll < 0f) lever.ChangePosition(-1);
+                    if (scroll > 0f) lever.ChangePosition(1);  // РљРѕР»РµСЃРёРєРѕ РІРІРµСЂС… -> РґРѕР±Р°РІРёС‚СЊ С…РѕРґ
+                    if (scroll < 0f) lever.ChangePosition(-1); // РљРѕР»РµСЃРёРєРѕ РІРЅРёР· -> С‚РѕСЂРјРѕР·
+                    return; // Р’С‹С…РѕРґРёРј РёР· РјРµС‚РѕРґР°, С‚Р°Рє РєР°Рє РѕР±СЉРµРєС‚ РЅР°Р№РґРµРЅ
                 }
-                else
+
+                // 2. РџСЂРѕРІРµСЂСЏРµРј, СЃРјРѕС‚СЂРёРј Р»Рё РјС‹ РЅР° РўРЈРњР‘Р›Р•Р  Р Р•Р’Р•Р РЎРћР Рђ
+                TrainReverser reverser = hit.collider.GetComponent<TrainReverser>();
+                if (reverser != null)
                 {
-                    // Этот лог ругнется, если коллайдер есть, а скрипта TrainLever на нем НЕТ
-                    Debug.LogWarning($"Колесико крутится над {hit.collider.gameObject.name}, но на нем НЕТ скрипта TrainLever!");
+                    if (scroll > 0f) reverser.ChangeReverserPosition(1);  // РљРѕР»РµСЃРёРєРѕ РІРІРµСЂС… -> Р’РїРµСЂРµРґ
+                    if (scroll < 0f) reverser.ChangeReverserPosition(-1); // РљРѕР»РµСЃРёРєРѕ РІРЅРёР· -> РќР°Р·Р°Рґ
+                    return;
                 }
             }
         }
@@ -113,7 +114,8 @@ public class CabinController : MonoBehaviour
 
 
 
-    // Рисуем точку строго по центру экрана
+
+    // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
     private void OnGUI()
     {
         float xMin = (Screen.width / 2f) - (dotSize / 2f);
@@ -123,32 +125,37 @@ public class CabinController : MonoBehaviour
         GUI.color = dotColor;
         GUI.DrawTexture(new Rect(xMin, yMin, dotSize, dotSize), dotTexture);
 
-        // --- НОВЫЙ КОД: ЭЛЕКТРОННОЕ ТАБЛО МАШИНИСТА ---
+        // --- пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ ---
 
-        // Создаем подложку (черное полупрозрачное окошко слева сверху)
-        GUI.color = new Color(0, 0, 0, 0.6f); // Черный цвет с альфой 60%
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ)
+        GUI.color = new Color(0, 0, 0, 0.6f); // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ 60%
         GUI.DrawTexture(new Rect(20, 20, 300, 150), Texture2D.whiteTexture);
 
-        // Настройки шрифта
-        GUI.color = Color.green; // Текст будет ядовито-зеленым, как на старых дисплеях метро
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
+        GUI.color = Color.green; // пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
         GUI.skin.label.fontSize = 16;
         GUI.skin.label.fontStyle = FontStyle.Bold;
 
-        // Выводим данные на табло
-        string speedText = $"СКОРОСТЬ: {TrainLever.Speed:F1} км/ч";
-        string modeText = $"РЕЖИМ: {TrainLever.LeverMode}";
-        string leftDoorsText = $"ЛЕВЫЕ ДВЕРИ: {(TrainButton.LeftDoorsOpen ? "ОТКРЫТЫ" : "ЗАКРЫТЫ")}";
-        string rightDoorsText = $"ПРАВЫЕ ДВЕРИ: {(TrainButton.RightDoorsOpen ? "ОТКРЫТЫ" : "ЗАКРЫТЫ")}";
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
+        string speedText = $"РЎРљРћР РћРЎРўР¬: {TrainLever.Speed:F1} РєРј/С‡"; 
+        string modeText = $"Р Р•Р–РРњ: {TrainLever.LeverMode}";
+        // РќРћР’РђРЇ РЎРўР РћР§РљРђ:
+        string reverserText = $"Р Р•Р’Р•Р РЎРћР : {TrainReverser.ReverserMode}"; 
+        string leftDoorsText = $"Р›Р•Р’Р«Р• Р”Р’Р•Р Р: {(TrainButton.LeftDoorsOpen ? "РћРўРљР Р«РўР«" : "Р—РђРљР Р«РўР«")}";
+        string rightDoorsText = $"РџР РђР’Р«Р• Р”Р’Р•Р Р: {(TrainButton.RightDoorsOpen ? "РћРўРљР Р«РўР«" : "Р—РђРљР Р«РўР«")}";
 
-        // Рисуем строчки друг под другом
         GUI.Label(new Rect(35, 30, 280, 30), speedText);
         GUI.Label(new Rect(35, 60, 280, 30), modeText);
 
-        // Для дверей сделаем подсветку: если открыты — пусть текст горит оранжевым/красным
+        // РќР°СЂРёСЃСѓРµРј СЂРµРІРµСЂСЃРѕСЂ СЃРІРѕРёРј С†РІРµС‚РѕРј РґР»СЏ РєСЂР°СЃРѕС‚С‹ (РЅР°РїСЂРёРјРµСЂ, Р¶РµР»С‚С‹Рј/Р±РµР»С‹Рј)
+        GUI.color = Color.white;
+        GUI.Label(new Rect(35, 90, 280, 30), reverserText); // РЎРґРІРёРіР°РµРј РґРІРµСЂРё С‡СѓС‚СЊ РЅРёР¶Рµ
+
         GUI.color = TrainButton.LeftDoorsOpen ? Color.red : Color.green;
-        GUI.Label(new Rect(35, 90, 280, 30), leftDoorsText);
+        GUI.Label(new Rect(35, 120, 280, 30), leftDoorsText); // РЎРґРІРёРЅСѓР»Рё РїРѕ РІС‹СЃРѕС‚Рµ РЅР° 120
 
         GUI.color = TrainButton.RightDoorsOpen ? Color.red : Color.green;
-        GUI.Label(new Rect(35, 120, 280, 30), rightDoorsText);
+        GUI.Label(new Rect(35, 150, 280, 30), rightDoorsText); // РЎРґРІРёРЅСѓР»Рё РїРѕ РІС‹СЃРѕС‚Рµ РЅР° 150
+
     }
 }

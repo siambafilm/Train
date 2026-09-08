@@ -2,68 +2,84 @@ using UnityEngine;
 
 public class TrainLever : MonoBehaviour
 {
-    [Header("Õ‡ÒÚÓÈÍË ÔÓÁËˆËÈ ˚˜‡„‡")]
+    [Header("ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ")]
     public int currentPosition = 0;
     public float angleStep = 20f;
 
-    [Header("‘ËÁËÍ‡ ÔÓÂÁ‰‡ (–Â‡ÎËÒÚË˜Ì‡ˇ)")]
+    [Header("ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ (ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ)")]
     public float currentSpeed = 0f;
     public float maxSpeed = 80f;
 
     public static float Speed = 0f;
-    public static string LeverMode = "¬€¡≈√";
+    public static string LeverMode = "ÔøΩÔøΩÔøΩÔøΩÔøΩ";
 
     void Update()
+{
+    bool anyDoorOpen = TrainButton.LeftDoorsOpen || TrainButton.RightDoorsOpen;
+
+    // --- –ò–ù–ñ–ï–ù–ï–†–ù–ê–Ø –ë–ï–ó–û–ü–ê–°–ù–û–°–¢–¨: –î–í–ï–†–ò ---
+    if (anyDoorOpen && currentPosition > 0)
     {
-        // --- »Õ∆≈Õ≈–Õ¿ﬂ ¡≈«Œœ¿—ÕŒ—“‹ ---
-        // œÓ‚ÂˇÂÏ, ÓÚÍ˚Ú˚ ÎË Í‡ÍËÂ-ÎË·Ó ‰‚ÂË
-        bool anyDoorOpen = TrainButton.LeftDoorsOpen || TrainButton.RightDoorsOpen;
+        currentPosition = 0; 
+        UpdateLeverVisual(); 
+        Debug.LogWarning("–ë–õ–û–ö–ò–†–û–í–ö–ê –¢–Ø–ì–ò: –î–≤–µ—Ä–∏ –æ—Ç–∫—Ä—ã—Ç—ã! –†–∞–∑–≥–æ–Ω –Ω–µ–≤–æ–∑–º–æ–∂–µ–Ω.");
+    }
 
-        // ≈ÒÎË ‰‚ÂË ÓÚÍ˚Ú˚, ‡ Ï‡¯ËÌËÒÚ Ô˚Ú‡ÂÚÒˇ Âı‡Ú¸ (’Ó‰ 1 ËÎË ’Ó‰ 2)
-        if (anyDoorOpen && currentPosition > 0)
-        {
-            currentPosition = 0; // œËÌÛ‰ËÚÂÎ¸ÌÓ Ò·‡Ò˚‚‡ÂÏ ˚˜‡„ ‚ ¬˚·Â„
-            UpdateLeverVisual(); // Œ·ÌÓ‚ÎˇÂÏ Ì‡ÍÎÓÌ ˚˜‡„‡ Ì‡ ÔÛÎ¸ÚÂ
-            Debug.LogWarning("¡ÀŒ »–Œ¬ ¿ “ﬂ√»: ƒ‚ÂË ÓÚÍ˚Ú˚! –‡Á„ÓÌ ÌÂ‚ÓÁÏÓÊÂÌ.");
-        }
+    // --- –ò–ù–ñ–ï–ù–ï–†–ù–ê–Ø –ë–ï–ó–û–ü–ê–°–ù–û–°–¢–¨: –†–ï–í–ï–†–°–û–† ---
+    // –ï—Å–ª–∏ —Ä–µ–≤–µ—Ä—Å–æ—Ä –≤ –Ω–µ–π—Ç—Ä–∞–ª–∏, –∞ –º—ã –ø—ã—Ç–∞–µ–º—Å—è –µ—Ö–∞—Ç—å ‚Äî —Å–±—Ä–∞—Å—ã–≤–∞–µ–º —Ö–æ–¥
+    if (TrainReverser.Direction == 0 && currentPosition > 0)
+    {
+        currentPosition = 0;
+        UpdateLeverVisual();
+        Debug.LogWarning("–ë–õ–û–ö–ò–†–û–í–ö–ê –¢–Ø–ì–ò: –†–µ–≤–µ—Ä—Å–æ—Ä —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω –≤ –ù–ï–ô–¢–†–ê–õ–¨!");
+    }
 
-        // »ÁÏÂÌˇÂÏ ÚÂÍÒÚÓ‚˚È ÂÊËÏ ‰Îˇ Ú‡·ÎÓ, ÂÒÎË Ò‡·ÓÚ‡Î‡ ·ÎÓÍËÓ‚Í‡
-        if (anyDoorOpen && currentPosition == 0)
-        {
-            LeverMode = "¡ÀŒ . “ﬂ√» (ƒ¬≈–»)";
-        }
-        else
-        {
-            // Œ·˚˜Ì‡ˇ ÎÓ„ËÍ‡ ÓÚÓ·‡ÊÂÌËˇ ÂÊËÏÓ‚
-            switch (currentPosition)
-            {
-                case 2: LeverMode = "’Œƒ - 2"; break;
-                case 1: LeverMode = "’Œƒ - 1"; break;
-                case 0: LeverMode = "¬€¡≈√"; break;
-                case -1: LeverMode = "“Œ–ÃŒ∆≈Õ»≈"; break;
-            }
-        }
-
-        // —ËÏÛÎˇˆËˇ ËÁÏÂÌÂÌËˇ ÒÍÓÓÒÚË (Ò Û˜ÂÚÓÏ ·ÎÓÍËÓ‚ÍË)
+    // –ù–∞—Å—Ç—Ä–æ–π–∫–∞ —Ç–µ–∫—Å—Ç–∞ –¥–ª—è —Ç–∞–±–ª–æ
+    if (anyDoorOpen && currentPosition == 0)
+    {
+        LeverMode = "–ë–õ–û–ö. –¢–Ø–ì–ò (–î–í–ï–†–ò)";
+    }
+    else if (TrainReverser.Direction == 0 && currentPosition > 0)
+    {
+        LeverMode = "–ë–õ–û–ö. –¢–Ø–ì–ò (–†–ï–í–ï–†–°)";
+    }
+    else
+    {
         switch (currentPosition)
         {
-            case 2:
-                currentSpeed += 2.5f * Time.deltaTime;
-                break;
-            case 1:
-                currentSpeed += 1.2f * Time.deltaTime;
-                break;
-            case 0:
-                currentSpeed -= 0.1f * Time.deltaTime;
-                break;
-            case -1:
-                currentSpeed -= 4.0f * Time.deltaTime;
-                break;
+            case 2: LeverMode = "–•–û–î - 2"; break;
+            case 1: LeverMode = "–•–û–î - 1"; break;
+            case 0: LeverMode = "–í–´–ë–ï–ì"; break;
+            case -1: LeverMode = "–¢–û–†–ú–û–ñ–ï–ù–ò–ï"; break;
         }
-
-        currentSpeed = Mathf.Clamp(currentSpeed, 0f, maxSpeed);
-        Speed = currentSpeed;
     }
+
+    // –°–∏–º—É–ª—è—Ü–∏—è –∏–∑–º–µ–Ω–µ–Ω–∏—è —Å–∫–æ—Ä–æ—Å—Ç–∏ —Å —É—á–µ—Ç–æ–º –Ω–∞–ø—Ä–∞–≤–ª–µ–Ω–∏—è —Ä–µ–≤–µ—Ä—Å–æ—Ä–∞
+    switch (currentPosition)
+    {
+        case 2:
+            currentSpeed += 2.5f * Time.deltaTime;
+            break;
+        case 1:
+            currentSpeed += 1.2f * Time.deltaTime;
+            break;
+        case 0:
+            // –ù–∞ –≤—ã–±–µ–≥–µ —Å–∫–æ—Ä–æ—Å—Ç—å –ø–ª–∞–≤–Ω–æ –ø–∞–¥–∞–µ—Ç –¥–æ –Ω—É–ª—è
+            currentSpeed -= 0.1f * Time.deltaTime;
+            break;
+        case -1:
+            currentSpeed -= 4.0f * Time.deltaTime;
+            break;
+    }
+
+    currentSpeed = Mathf.Clamp(currentSpeed, 0f, maxSpeed);
+    
+    // –ï—Å–ª–∏ —Å–∫–æ—Ä–æ—Å—Ç—å —É–ø–∞–ª–∞ –¥–æ 0 –Ω–∞ –≤—ã–±–µ–≥–µ –∏–ª–∏ —Ç–æ—Ä–º–æ–∑–µ, –∞ —Ä–µ–≤–µ—Ä—Å–æ—Ä –≤ –Ω–µ–π—Ç—Ä–∞–ª–∏, –∂–µ—Å—Ç–∫–æ –¥–µ—Ä–∂–∏–º 0
+    if (currentSpeed < 0.01f) currentSpeed = 0f;
+
+    Speed = currentSpeed;
+}
+
 
 
     public void ChangePosition(int direction)
