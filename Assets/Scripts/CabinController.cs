@@ -129,7 +129,7 @@ public class CabinController : MonoBehaviour
 
         // ������� �������� (������ �������������� ������ ����� ������)
         GUI.color = new Color(0, 0, 0, 0.6f); // ������ ���� � ������ 60%
-        GUI.DrawTexture(new Rect(20, 20, 300, 150), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(20, 20, 300, 200), Texture2D.whiteTexture);
 
         // ��������� ������
         GUI.color = Color.green; // ����� ����� �������-�������, ��� �� ������ �������� �����
@@ -156,6 +156,14 @@ public class CabinController : MonoBehaviour
 
         GUI.color = TrainButton.RightDoorsOpen ? Color.red : Color.green;
         GUI.Label(new Rect(35, 150, 280, 30), rightDoorsText); // Сдвинули по высоте на 150
+
+        // Добавьте эту строку к остальным текстам в OnGUI()
+        string trackSwitchText = $"СТРЕЛКА: {(SwitchButton.SwitchDirectionRight ? ">>> НАПРАВО" : "<<< НАЛЕВО")}";
+
+        // Отрисуем её чуть ниже дверей (на высоте 180)
+        GUI.color = Color.cyan; // Сделаем текст стрелки красивым голубым цветом
+        GUI.Label(new Rect(35, 180, 280, 30), trackSwitchText);
+
 
     }
 }
