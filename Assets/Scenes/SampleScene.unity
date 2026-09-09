@@ -6342,6 +6342,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainMovement
   currentYawSpeed: 0
+  turnSmoothingTime: 3
+  maxTurnRate: 30
+  referenceSpeed: 40
 --- !u!114 &448800167
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -26947,8 +26950,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 21.77656, y: 16.16766, z: 64.62845}
-  m_Center: {x: 0.3147955, y: 7.583831, z: -0.20487976}
+  m_Size: {x: 21.77656, y: 16.16766, z: 36.647064}
+  m_Center: {x: 0.3147955, y: 7.583831, z: -14.195572}
 --- !u!114 &1772091872
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -32495,7 +32498,7 @@ Transform:
   m_GameObject: {fileID: 2071093426}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.7, y: 1.37, z: -3.8}
+  m_LocalPosition: {x: 0.7, y: 1.37, z: -27.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
