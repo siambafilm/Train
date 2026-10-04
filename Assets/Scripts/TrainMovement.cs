@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class TrainMovement : MonoBehaviour
@@ -12,6 +13,11 @@ public class TrainMovement : MonoBehaviour
     [SerializeField] private string markerTag = "TrainTrackMarker";
     [SerializeField] private float rotationLerpSpeed = 8f;
 
+    [Header("Тряска при упоре в конец пути")]
+    [SerializeField] private float shakeDuration = 0.5f;
+    [SerializeField] private float shakeAmplitude = 0.15f;
+    [SerializeField] private float shakeFrequency = 35f;
+
     // Смещения вагонов относительно головы (в метрах вдоль поезда)
     private float[] carOffsets;
     private float trainLength;
@@ -21,14 +27,18 @@ public class TrainMovement : MonoBehaviour
     private readonly List<float>   trailDistances = new List<float>();
 
     // Текущее положение головы вдоль цепочки маркеров
-    private TrainTrackMarker currentMarker; // маркер, который голова только что прошла
-    private TrainTrackMarker nextMarker;    // маркер, к которому голова едет
-    private float segmentLength;            // длина текущего сегмента current -> next
-    private float progress;                 // 0..1 по сегменту
-
+    private TrainTrackMarker currentMarker;
+    private TrainTrackMarker nextMarker;
+    private float segmentLength;
+    private float progress;
     private bool initialized = false;
 
-    // Публичный доступ к составу (используется TrainLever)
+    // Тряска
+    private bool isShaking = false;
+    private float shakeTimer = 0f;
+    private Vector3 shakeBasePosition;
+    private Quaternion shakeBaseRotation;
+
     public int CarsCount => cars.Count;
 
     void Start()
@@ -43,11 +53,12 @@ public class TrainMovement : MonoBehaviour
             }
         }
 
-        ComputeCarOffsets();
+        // Прописываем каждому вагону ссылку на этот поезд
+        foreach (var c in cars) c.ParentTrain = this;
+
+        RecomputeCarOffsets();
         WireBackwardsLinks();
-
         if (!SnapToMarkers()) return;
-
         initialized = true;
     }
 
@@ -55,19 +66,72 @@ public class TrainMovement : MonoBehaviour
     {
         if (!initialized) return;
 
-        // Скорость положительная, реверсор задаёт знак
+        // Обработка тряски
+        if (isShaking)
+        {
+            shakeTimer += Time.deltaTime;
+            if (shakeTimer >= shakeDuration)
+            {
+                isShaking = false;
+                transform.localPosition = shakeBasePosition;
+                transform.localRotation = shakeBaseRotation;
+            }
+            else
+            {
+                float t = shakeTimer / shakeDuration;
+                float decay = 1f - t; // затухание
+                float offsetX = Mathf.Sin(shakeTimer * shakeFrequency) * shakeAmplitude * decay;
+                float offsetY = Mathf.Sin(shakeTimer * shakeFrequency * 1.3f) * shakeAmplitude * 0.5f * decay;
+                float rotZ = Mathf.Sin(shakeTimer * shakeFrequency * 0.8f) * 2f * decay;
+
+                transform.localPosition = shakeBasePosition + new Vector3(offsetX, offsetY, 0f);
+                transform.localRotation = shakeBaseRotation * Quaternion.Euler(0f, 0f, rotZ);
+            }
+            // Во время тряски движение отключено (isShaking = true), но вагоны всё равно обновляем
+            UpdateCars();
+            return;
+        }
+
         float speedMs = TrainLever.Speed / 3.6f;
         float ds = speedMs * Time.deltaTime * TrainReverser.Direction;
-
         if (Mathf.Abs(ds) > 0.00001f) Advance(ds);
         UpdateCars();
     }
 
     // -------------------------------------------------------------------
+    //  Публичные методы для сцепки/расцепки на лету
+    // -------------------------------------------------------------------
+    public void AttachCar(TrainCar car)
+    {
+        if (car == null || cars.Contains(car)) return;
+        cars.Add(car);
+        car.ParentTrain = this;
+        RecomputeCarOffsets();
+        Debug.Log($"[TrainMovement] Вагон {car.name} добавлен в состав. Всего вагонов: {cars.Count}");
+    }
+
+    public void DetachCar(TrainCar car)
+    {
+        if (car == null) return;
+        if (!cars.Contains(car)) return;
+
+        // Нельзя отцепить голову (локомотив)
+        if (cars.IndexOf(car) == 0)
+        {
+            Debug.LogWarning("[TrainMovement] Нельзя отцепить голову поезда!");
+            return;
+        }
+
+        cars.Remove(car);
+        car.ParentTrain = null;
+        RecomputeCarOffsets();
+        Debug.Log($"[TrainMovement] Вагон {car.name} удалён из состава. Всего вагонов: {cars.Count}");
+    }
+
+    // -------------------------------------------------------------------
     //  Инициализация
     // -------------------------------------------------------------------
-
-    void ComputeCarOffsets()
+    void RecomputeCarOffsets()
     {
         carOffsets = new float[cars.Count];
         carOffsets[0] = 0f;
@@ -76,10 +140,9 @@ public class TrainMovement : MonoBehaviour
             carOffsets[i] = carOffsets[i - 1] +
                 Vector3.Distance(cars[i - 1].transform.position, cars[i].transform.position);
         }
-        trainLength = carOffsets[cars.Count - 1];
+        trainLength = cars.Count > 0 ? carOffsets[cars.Count - 1] : 0f;
     }
 
-    /// <summary>Прописываем каждой стрелке ветки назад (для движения задним ходом).</summary>
     void WireBackwardsLinks()
     {
         var all = FindObjectsByType<TrainTrackMarker>(FindObjectsSortMode.None);
@@ -94,7 +157,6 @@ public class TrainMovement : MonoBehaviour
         }
     }
 
-    /// <summary>Ставим голову на ближайший маркер и строим трейл назад длиной trainLength.</summary>
     bool SnapToMarkers()
     {
         var all = FindObjectsByType<TrainTrackMarker>(FindObjectsSortMode.None);
@@ -104,7 +166,6 @@ public class TrainMovement : MonoBehaviour
             return false;
         }
 
-        // 1. Ближайший к голове маркер
         Vector3 headPos = cars[0].transform.position;
         TrainTrackMarker closest = null;
         float minD = float.MaxValue;
@@ -114,18 +175,18 @@ public class TrainMovement : MonoBehaviour
             if (d < minD) { minD = d; closest = m; }
         }
         currentMarker = closest;
-
-        // 2. Следующий маркер с учётом стрелок
         nextMarker = ChooseNext(currentMarker);
+
         if (nextMarker == null)
         {
             Debug.LogError($"[TrainMovement] У стартового маркера '{currentMarker.name}' нет следующего!");
             return false;
         }
+
         segmentLength = Vector3.Distance(currentMarker.transform.position, nextMarker.transform.position);
         progress = 0f;
 
-        // 3. Строим трейл назад — от currentMarker по nextBackward пока не наберём trainLength
+        // Строим трейл назад длиной trainLength
         List<TrainTrackMarker> chain = new List<TrainTrackMarker> { currentMarker };
         float cumBack = 0f;
         TrainTrackMarker cursor = currentMarker;
@@ -156,7 +217,6 @@ public class TrainMovement : MonoBehaviour
     // -------------------------------------------------------------------
     //  Движение головы
     // -------------------------------------------------------------------
-
     void Advance(float ds)
     {
         if (ds > 0f) AdvanceForward(ds);
@@ -168,8 +228,14 @@ public class TrainMovement : MonoBehaviour
         int guard = 0;
         while (amount > 0f && guard++ < 200)
         {
-            float distToNext = (1f - progress) * segmentLength;
+            // Если впереди нет пути — УПОРА! Трясём и останавливаем.
+            if (nextMarker == null)
+            {
+                TriggerShake();
+                return;
+            }
 
+            float distToNext = (1f - progress) * segmentLength;
             if (amount < distToNext)
             {
                 progress += amount / segmentLength;
@@ -177,14 +243,18 @@ public class TrainMovement : MonoBehaviour
             }
             else
             {
-                // Дошли до nextMarker — пришпиливаем его в трейл
                 amount -= distToNext;
                 trailPoints.Add(nextMarker.transform.position);
                 trailDistances.Add(trailDistances[trailDistances.Count - 1] + segmentLength);
 
                 currentMarker = nextMarker;
                 nextMarker = ChooseNext(currentMarker);
-                if (nextMarker == null) { progress = 0f; return; }
+                if (nextMarker == null)
+                {
+                    progress = 1f; // дошли до упора
+                    TriggerShake();
+                    return;
+                }
                 segmentLength = Vector3.Distance(currentMarker.transform.position, nextMarker.transform.position);
                 progress = 0f;
             }
@@ -197,7 +267,6 @@ public class TrainMovement : MonoBehaviour
         while (amount > 0f && guard++ < 200)
         {
             float distToCurrent = progress * segmentLength;
-
             if (amount < distToCurrent)
             {
                 progress -= amount / segmentLength;
@@ -207,16 +276,21 @@ public class TrainMovement : MonoBehaviour
             {
                 amount -= distToCurrent;
 
-                // Откатываем последний маркер из трейла
-                if (trailPoints.Count > 1)
-                {
-                    trailPoints.RemoveAt(trailPoints.Count - 1);
-                    trailDistances.RemoveAt(trailDistances.Count - 1);
-                }
-
                 nextMarker = currentMarker;
                 currentMarker = currentMarker.nextBackward;
-                if (currentMarker == null) { progress = 0f; return; }
+
+                // Если назад пути нет — УПОРА!
+                if (currentMarker == null)
+                {
+                    currentMarker = nextMarker;
+                    nextMarker = ChooseNext(currentMarker);
+                    if (nextMarker != null)
+                        segmentLength = Vector3.Distance(currentMarker.transform.position, nextMarker.transform.position);
+                    progress = 0f;
+                    TriggerShake();
+                    return;
+                }
+
                 segmentLength = Vector3.Distance(currentMarker.transform.position, nextMarker.transform.position);
                 progress = 1f;
             }
@@ -226,18 +300,34 @@ public class TrainMovement : MonoBehaviour
     TrainTrackMarker ChooseNext(TrainTrackMarker from)
     {
         if (from == null) return null;
-        // Намерение машиниста, выбранное кнопкой в кабине
         return from.GetNextForward(SwitchButton.WantsToTurnRight);
+    }
+
+    // -------------------------------------------------------------------
+    //  Тряска при упоре в конец пути
+    // -------------------------------------------------------------------
+    void TriggerShake()
+    {
+        if (isShaking) return;
+        isShaking = true;
+        shakeTimer = 0f;
+        shakeBasePosition = transform.localPosition;
+        shakeBaseRotation = transform.localRotation;
+
+        // Обнуляем скорость через рычаг — поезд реально останавливается
+        TrainLever.ForceStop();
+        Debug.Log("[TrainMovement] УПОР! Путь закончился. Поезд остановлен с тряской.");
     }
 
     // -------------------------------------------------------------------
     //  Раскладка вагонов вдоль трейла
     // -------------------------------------------------------------------
-
     void UpdateCars()
     {
+        if (trailDistances.Count == 0) return;
+
         float lastTrailDist = trailDistances[trailDistances.Count - 1];
-        float headPathDist  = lastTrailDist + progress * segmentLength;
+        float headPathDist = lastTrailDist + progress * segmentLength;
 
         for (int i = 0; i < cars.Count; i++)
         {
@@ -255,13 +345,12 @@ public class TrainMovement : MonoBehaviour
         }
     }
 
-    /// <summary>Позиция и направление на расстоянии d от начала трейла.</summary>
     void GetPosAndDir(float d, out Vector3 pos, out Vector3 fwd)
     {
         float lastTrailDist = trailDistances[trailDistances.Count - 1];
 
         // 1. Впереди последней точки трейла — интерполируем на текущем сегменте
-        if (d >= lastTrailDist && nextMarker != null && segmentLength > 0.0001f)
+        if (d >= lastTrailDist && nextMarker != null && currentMarker != null && segmentLength > 0.0001f)
         {
             float t = Mathf.Clamp01((d - lastTrailDist) / segmentLength);
             Vector3 a = currentMarker.transform.position;
@@ -298,18 +387,15 @@ public class TrainMovement : MonoBehaviour
         }
 
         float segLen = trailDistances[segIdx + 1] - trailDistances[segIdx];
-        float segT   = segLen > 0.0001f ? (d - trailDistances[segIdx]) / segLen : 0f;
-
+        float segT = segLen > 0.0001f ? (d - trailDistances[segIdx]) / segLen : 0f;
         Vector3 p0 = trailPoints[segIdx];
         Vector3 p1 = trailPoints[segIdx + 1];
         pos = Vector3.Lerp(p0, p1, segT);
-
         Vector3 v = p1 - p0;
         if (v.sqrMagnitude > 0.0001f) { v.Normalize(); fwd = v; }
         else fwd = cars[0].transform.forward;
     }
 
-    // Заглушки — оставлены на случай, если какие-то скрипты ещё их вызывают
     public void StartTurning(float direction) { }
     public void StopTurning() { }
 
