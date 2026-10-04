@@ -5188,6 +5188,7 @@ GameObject:
   m_Component:
   - component: {fileID: 367834966}
   - component: {fileID: 367834965}
+  - component: {fileID: 367834967}
   m_Layer: 0
   m_Name: 9 (6)
   m_TagString: Untagged
@@ -5208,6 +5209,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1433208367}
@@ -5229,6 +5231,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &367834967
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 367834964}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &369688106
 GameObject:
   m_ObjectHideFlags: 0
@@ -6283,6 +6306,165 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 414701786}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &432901931
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 432901936}
+  - component: {fileID: 432901935}
+  - component: {fileID: 432901934}
+  - component: {fileID: 432901933}
+  - component: {fileID: 432901932}
+  m_Layer: 0
+  m_Name: ThirdPersonCamera
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!114 &432901932
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 432901931}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96be7a2fe2020d14ba13d381d32c27d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ThirdPersonCamera
+  target: {fileID: 448800165}
+  targetOffset: {x: 0, y: 2, z: 0}
+  distance: 15
+  minDistance: 5
+  maxDistance: 30
+  zoomSpeed: 5
+  mouseSensitivity: 2
+  minPitch: -15
+  maxPitch: 80
+--- !u!114 &432901933
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 432901931}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
+  m_RenderShadows: 1
+  m_RequiresDepthTextureOption: 2
+  m_RequiresOpaqueTextureOption: 2
+  m_CameraType: 0
+  m_Cameras: []
+  m_RendererIndex: -1
+  m_VolumeLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  m_VolumeTrigger: {fileID: 0}
+  m_VolumeFrameworkUpdateModeOption: 2
+  m_RenderPostProcessing: 0
+  m_Antialiasing: 0
+  m_AntialiasingQuality: 2
+  m_StopNaN: 0
+  m_Dithering: 0
+  m_ClearDepth: 1
+  m_AllowXRRendering: 1
+  m_AllowHDROutput: 1
+  m_UseScreenCoordOverride: 0
+  m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
+  m_RequiresDepthTexture: 0
+  m_RequiresColorTexture: 0
+  m_TaaSettings:
+    m_Quality: 3
+    m_FrameInfluence: 0.1
+    m_JitterScale: 1
+    m_MipBias: 0
+    m_VarianceClampScale: 0.9
+    m_ContrastAdaptiveSharpening: 0
+  m_Version: 2
+--- !u!81 &432901934
+AudioListener:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 432901931}
+  m_Enabled: 1
+--- !u!20 &432901935
+Camera:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 432901931}
+  m_Enabled: 1
+  serializedVersion: 2
+  m_ClearFlags: 1
+  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_projectionMatrixMode: 1
+  m_GateFitMode: 2
+  m_FOVAxisMode: 0
+  m_Iso: 200
+  m_ShutterSpeed: 0.005
+  m_Aperture: 16
+  m_FocusDistance: 10
+  m_FocalLength: 50
+  m_BladeCount: 5
+  m_Curvature: {x: 2, y: 11}
+  m_BarrelClipping: 0.25
+  m_Anamorphism: 0
+  m_SensorSize: {x: 36, y: 24}
+  m_LensShift: {x: 0, y: 0}
+  m_NormalizedViewPortRect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1
+    height: 1
+  near clip plane: 0.3
+  far clip plane: 1000
+  field of view: 60
+  orthographic: 0
+  orthographic size: 5
+  m_Depth: 0
+  m_CullingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_RenderingPath: -1
+  m_TargetTexture: {fileID: 0}
+  m_TargetDisplay: 0
+  m_TargetEye: 3
+  m_HDR: 1
+  m_AllowMSAA: 1
+  m_AllowDynamicResolution: 0
+  m_ForceIntoRT: 0
+  m_OcclusionCulling: 1
+  m_StereoConvergence: 10
+  m_StereoSeparation: 0.022
+--- !u!4 &432901936
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 432901931}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0.039151404, y: 0.7073296, z: -0.039297104, w: -0.70470417}
+  m_LocalPosition: {x: 92, y: 29.2, z: 238.8}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 6.36, y: -90.213, z: 0}
 --- !u!1 &441386869
 GameObject:
   m_ObjectHideFlags: 0
@@ -9420,6 +9602,7 @@ GameObject:
   m_Component:
   - component: {fileID: 589495435}
   - component: {fileID: 589495436}
+  - component: {fileID: 589495437}
   m_Layer: 0
   m_Name: 6
   m_TagString: Untagged
@@ -9455,12 +9638,34 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 668459010}
   nextForwardRight: {fileID: 0}
   nextForwardLeft: {fileID: 0}
   nextBackward: {fileID: 0}
+--- !u!135 &589495437
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 589495434}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &598207851
 GameObject:
   m_ObjectHideFlags: 0
@@ -9471,6 +9676,7 @@ GameObject:
   m_Component:
   - component: {fileID: 598207853}
   - component: {fileID: 598207852}
+  - component: {fileID: 598207854}
   m_Layer: 0
   m_Name: 9
   m_TagString: Untagged
@@ -9491,6 +9697,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1150842054}
@@ -9512,6 +9719,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &598207854
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 598207851}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &627120157
 GameObject:
   m_ObjectHideFlags: 0
@@ -10264,6 +10492,7 @@ GameObject:
   m_Component:
   - component: {fileID: 668459011}
   - component: {fileID: 668459010}
+  - component: {fileID: 668459012}
   m_Layer: 0
   m_Name: 7
   m_TagString: Untagged
@@ -10284,6 +10513,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 1
   associatedSwitch: {fileID: 968555764}
   nextForward: {fileID: 0}
@@ -10305,6 +10535,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &668459012
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 668459009}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &670421396
 GameObject:
   m_ObjectHideFlags: 0
@@ -13463,6 +13714,7 @@ GameObject:
   m_Component:
   - component: {fileID: 847283363}
   - component: {fileID: 847283362}
+  - component: {fileID: 847283364}
   m_Layer: 0
   m_Name: 9 (2)
   m_TagString: Untagged
@@ -13483,6 +13735,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 2113022650}
@@ -13504,6 +13757,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &847283364
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 847283361}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &884680174
 GameObject:
   m_ObjectHideFlags: 0
@@ -13867,6 +14141,7 @@ GameObject:
   m_Component:
   - component: {fileID: 907081661}
   - component: {fileID: 907081660}
+  - component: {fileID: 907081662}
   m_Layer: 0
   m_Name: 9 (3)
   m_TagString: Untagged
@@ -13887,6 +14162,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 847283362}
@@ -13908,6 +14184,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &907081662
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 907081659}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &908682691
 GameObject:
   m_ObjectHideFlags: 0
@@ -17241,6 +17538,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1150842055}
   - component: {fileID: 1150842054}
+  - component: {fileID: 1150842056}
   m_Layer: 0
   m_Name: 9 (1)
   m_TagString: Untagged
@@ -17261,6 +17559,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 907081660}
@@ -17282,6 +17581,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &1150842056
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1150842053}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1158640233
 GameObject:
   m_ObjectHideFlags: 0
@@ -18328,6 +18648,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1210207204}
   - component: {fileID: 1210207203}
+  - component: {fileID: 1210207205}
   m_Layer: 0
   m_Name: 5
   m_TagString: Untagged
@@ -18348,6 +18669,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 589495436}
@@ -18369,6 +18691,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &1210207205
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1210207202}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1231046439
 GameObject:
   m_ObjectHideFlags: 0
@@ -19550,6 +19893,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1287462496}
   - component: {fileID: 1287462497}
+  - component: {fileID: 1287462498}
   m_Layer: 0
   m_Name: 2
   m_TagString: Untagged
@@ -19585,12 +19929,34 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1935769606}
   nextForwardRight: {fileID: 0}
   nextForwardLeft: {fileID: 0}
   nextBackward: {fileID: 0}
+--- !u!135 &1287462498
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1287462495}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1296340850
 GameObject:
   m_ObjectHideFlags: 0
@@ -20532,6 +20898,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1330128970}
   - component: {fileID: 1330128969}
+  - component: {fileID: 1330128971}
   m_Layer: 0
   m_Name: 9 (5)
   m_TagString: Untagged
@@ -20552,6 +20919,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 367834965}
@@ -20573,6 +20941,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &1330128971
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1330128968}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1346360516
 GameObject:
   m_ObjectHideFlags: 0
@@ -22159,6 +22548,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1416768314}
   - component: {fileID: 1416768313}
+  - component: {fileID: 1416768315}
   m_Layer: 0
   m_Name: 4
   m_TagString: Untagged
@@ -22179,6 +22569,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1210207203}
@@ -22200,6 +22591,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &1416768315
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1416768312}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1419089788
 GameObject:
   m_ObjectHideFlags: 0
@@ -22614,6 +23026,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1433208368}
   - component: {fileID: 1433208367}
+  - component: {fileID: 1433208369}
   m_Layer: 0
   m_Name: 9 (7)
   m_TagString: Untagged
@@ -22634,6 +23047,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 0}
@@ -22655,6 +23069,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &1433208369
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1433208366}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1436398169
 GameObject:
   m_ObjectHideFlags: 0
@@ -27773,6 +28208,53 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1746338323}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1755947349
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1755947351}
+  - component: {fileID: 1755947350}
+  m_Layer: 0
+  m_Name: CameraManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1755947350
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1755947349}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5369eecb1bacec448a8deead28d7c170, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraManager
+  firstPersonCamera: {fileID: 330585543}
+  thirdPersonCamera: {fileID: 432901931}
+  toggleKey: 99
+--- !u!4 &1755947351
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1755947349}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 44.94244, y: 38.1714, z: 281.6854}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1761548756
 GameObject:
   m_ObjectHideFlags: 0
@@ -27898,6 +28380,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1761932962}
   - component: {fileID: 1761932963}
+  - component: {fileID: 1761932964}
   m_Layer: 0
   m_Name: 1
   m_TagString: Untagged
@@ -27933,12 +28416,34 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1287462497}
   nextForwardRight: {fileID: 0}
   nextForwardLeft: {fileID: 0}
   nextBackward: {fileID: 0}
+--- !u!135 &1761932964
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1761932961}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1771867954
 GameObject:
   m_ObjectHideFlags: 0
@@ -31181,6 +31686,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1935769605}
   - component: {fileID: 1935769606}
+  - component: {fileID: 1935769607}
   m_Layer: 0
   m_Name: 3
   m_TagString: Untagged
@@ -31216,12 +31722,34 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1416768313}
   nextForwardRight: {fileID: 0}
   nextForwardLeft: {fileID: 0}
   nextBackward: {fileID: 0}
+--- !u!135 &1935769607
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1935769604}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1935934231
 GameObject:
   m_ObjectHideFlags: 0
@@ -34009,6 +34537,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2078274933}
   - component: {fileID: 2078274932}
+  - component: {fileID: 2078274934}
   m_Layer: 0
   m_Name: 10
   m_TagString: Untagged
@@ -34029,6 +34558,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 0}
@@ -34050,6 +34580,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &2078274934
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2078274931}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2092922336
 GameObject:
   m_ObjectHideFlags: 0
@@ -34859,6 +35410,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2113022651}
   - component: {fileID: 2113022650}
+  - component: {fileID: 2113022652}
   m_Layer: 0
   m_Name: 9 (4)
   m_TagString: Untagged
@@ -34879,6 +35431,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 1
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 1330128969}
@@ -34900,6 +35453,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &2113022652
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2113022649}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2117751888 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 4b1ae6b869a9d304b9367b372f8e899d, type: 3}
@@ -34936,6 +35510,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2123718379}
   - component: {fileID: 2123718378}
+  - component: {fileID: 2123718380}
   m_Layer: 0
   m_Name: 8
   m_TagString: Untagged
@@ -34956,6 +35531,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainTrackMarker
   reachRadius: 1.5
+  cameraMode: 0
   isSwitchPoint: 0
   associatedSwitch: {fileID: 0}
   nextForward: {fileID: 2078274932}
@@ -34977,6 +35553,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!135 &2123718380
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2123718377}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 3
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2127788583
 GameObject:
   m_ObjectHideFlags: 0
@@ -35457,3 +36054,5 @@ SceneRoots:
   - {fileID: 977682551}
   - {fileID: 968555766}
   - {fileID: 2055370098}
+  - {fileID: 432901936}
+  - {fileID: 1755947351}
