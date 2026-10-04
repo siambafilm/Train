@@ -262,40 +262,45 @@ public class TrainMovement : MonoBehaviour
     }
 
     void AdvanceBackward(float amount)
+{
+    int guard = 0;
+    while (amount > 0f && guard++ < 200)
     {
-        int guard = 0;
-        while (amount > 0f && guard++ < 200)
+        float distToCurrent = progress * segmentLength;
+        if (amount < distToCurrent)
         {
-            float distToCurrent = progress * segmentLength;
-            if (amount < distToCurrent)
+            progress -= amount / segmentLength;
+            amount = 0f;
+        }
+        else
+        {
+            amount -= distToCurrent;
+
+            // Нельзя уехать назад дальше самого первого маркера — УПОР
+            if (currentMarker == null || currentMarker.nextBackward == null)
             {
-                progress -= amount / segmentLength;
-                amount = 0f;
+                progress = 0f;
+                TriggerShake();
+                return;
             }
-            else
+
+            // «Откатываем» трейл: убираем точку, которую покидаем.
+            // Без этой строки lastTrailDist перестаёт соответствовать currentMarker,
+            // и вагоны уезжают на один сегмент вперёд.
+            if (trailPoints.Count > 1)
             {
-                amount -= distToCurrent;
-
-                nextMarker = currentMarker;
-                currentMarker = currentMarker.nextBackward;
-
-                // Если назад пути нет — УПОРА!
-                if (currentMarker == null)
-                {
-                    currentMarker = nextMarker;
-                    nextMarker = ChooseNext(currentMarker);
-                    if (nextMarker != null)
-                        segmentLength = Vector3.Distance(currentMarker.transform.position, nextMarker.transform.position);
-                    progress = 0f;
-                    TriggerShake();
-                    return;
-                }
-
-                segmentLength = Vector3.Distance(currentMarker.transform.position, nextMarker.transform.position);
-                progress = 1f;
+                trailPoints.RemoveAt(trailPoints.Count - 1);
+                trailDistances.RemoveAt(trailDistances.Count - 1);
             }
+
+            nextMarker = currentMarker;
+            currentMarker = currentMarker.nextBackward;
+            segmentLength = Vector3.Distance(currentMarker.transform.position,
+                                             nextMarker.transform.position);
+            progress = 1f;
         }
     }
+}
 
     TrainTrackMarker ChooseNext(TrainTrackMarker from)
     {
