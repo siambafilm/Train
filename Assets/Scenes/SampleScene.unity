@@ -5590,7 +5590,7 @@ Transform:
   m_GameObject: {fileID: 375278772}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: -1.425077, z: -39.9}
+  m_LocalPosition: {x: 0, y: -0.66, z: -29.77}
   m_LocalScale: {x: 7.592917, y: 15.185834, z: 37.29546}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6457,6 +6457,9 @@ MonoBehaviour:
   cars: []
   markerTag: TrainTrackMarker
   rotationLerpSpeed: 8
+  shakeDuration: 0.5
+  shakeAmplitude: 0.15
+  shakeFrequency: 35
 --- !u!114 &448800167
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11013,7 +11016,7 @@ Transform:
   m_GameObject: {fileID: 689920503}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 1, y: 4.71, z: 165.2}
+  m_LocalPosition: {x: 1, y: 4.71, z: 213.1}
   m_LocalScale: {x: 7.592917, y: 15.185834, z: 37.29546}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -18751,6 +18754,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TrainReverser
   currentReverserPosition: 0
   rotationAngle: 30
+  minSpeedToSwitch: 1.5
 --- !u!65 &1253447139
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -29631,7 +29635,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4b1ae6b869a9d304b9367b372f8e899d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2117751889}
   m_SourcePrefab: {fileID: 100100000, guid: 4b1ae6b869a9d304b9367b372f8e899d, type: 3}
 --- !u!4 &1856462780 stripped
 Transform:
@@ -33567,7 +33574,7 @@ Transform:
   m_GameObject: {fileID: 2055370097}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 27.20376, y: 36.95489, z: 316.92834}
+  m_LocalPosition: {x: 27.20376, y: 39, z: 316.92834}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -34893,6 +34900,32 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2055370098}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2117751888 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 4b1ae6b869a9d304b9367b372f8e899d, type: 3}
+  m_PrefabInstance: {fileID: 1856462779}
+  m_PrefabAsset: {fileID: 0}
+--- !u!65 &2117751889
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2117751888}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 9.831318, y: 14.167359, z: 36.081604}
+  m_Center: {x: -0.032708883, y: -1.410788, z: -0.42323303}
 --- !u!1 &2123718377
 GameObject:
   m_ObjectHideFlags: 0
