@@ -27,7 +27,7 @@
       "id": "red",
       "name": "Красная линия",
       "colorKey": "red",
-      "heightLayer": -1,
+      "heightLayer": 1,
       "stations": [
         { "id": "kvantovaya",       "name": "Квантовая",         "pos": [-90,  -310] },
         { "id": "nii",              "name": "НИИ",               "pos": [-57,  -260] },
@@ -58,7 +58,7 @@
       "id": "purple",
       "name": "Фиолетовая линия",
       "colorKey": "purple",
-      "heightLayer": -1,
+      "heightLayer": 3,
       "stations": [
         { "id": "verhny_rynok",      "name": "Верхний рынок",  "pos": [250,  -250] },
         { "id": "okeanarium",        "name": "Океанариум",     "pos": [370,  -210] },
@@ -76,7 +76,7 @@
       "id": "black",
       "name": "Чёрная линия",
       "colorKey": "black",
-      "heightLayer": -1,
+      "heightLayer": 2,
       "stations": [
         { "id": "muzey_boevoy_slavy","name": "Музей боевой славы","pos": [-570, -260] },
         { "id": "akademiya_dizayna", "name": "Академия дизайна",  "pos": [-390, -240] },

@@ -144,58 +144,70 @@ public class MetroMapBuilder : MonoBehaviour
     {
         int n = data.lines.Length;
         var heights = new int[n];
+        for (int i = 0; i < n; i++) heights[i] = -1;
 
-        bool allExplicit = true;
+        // 1. Применяем то, что задано явно в конфиге
         for (int i = 0; i < n; i++)
-            if (data.lines[i].heightLayer < 0) { allExplicit = false; break; }
+            if (data.lines[i].heightLayer >= 0)
+                heights[i] = data.lines[i].heightLayer;
 
-        if (allExplicit)
-        {
-            for (int i = 0; i < n; i++) heights[i] = data.lines[i].heightLayer;
-        }
-        else
-        {
-            var adj = new List<int>[n];
-            var transfers = new List<int>[n];
-            for (int i = 0; i < n; i++) { adj[i] = new List<int>(); transfers[i] = new List<int>(); }
+        // 2. Строим граф пересечений/пересадок
+        var adj = new List<int>[n];
+        var transfers = new List<int>[n];
+        for (int i = 0; i < n; i++) { adj[i] = new List<int>(); transfers[i] = new List<int>(); }
 
-            for (int i = 0; i < n; i++)
-            for (int j = i + 1; j < n; j++)
+        for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++)
+        {
+            bool tr = LinesTransfer(data.lines[i], data.lines[j]);
+            bool cr = LinesCross2D(data.lines[i], data.lines[j]);
+            if (tr || cr)
             {
-                bool tr = LinesTransfer(data.lines[i], data.lines[j]);
-                bool cr = LinesCross2D(data.lines[i], data.lines[j]);
-                if (tr || cr)
+                adj[i].Add(j); adj[j].Add(i);
+                if (tr) { transfers[i].Add(j); transfers[j].Add(i); }
+            }
+        }
+
+        // 3. Авторасчёт ТОЛЬКО для незаданных
+        for (int start = 0; start < n; start++)
+        {
+            if (heights[start] >= 0) continue;
+
+            int seedH = 0;
+            foreach (int u in adj[start])
+                if (heights[u] >= 0) { seedH = heights[u] + 1; break; }
+
+            heights[start] = seedH;
+            var q = new Queue<int>();
+            q.Enqueue(start);
+            while (q.Count > 0)
+            {
+                int v = q.Dequeue();
+                foreach (int u in adj[v])
+                    if (heights[u] < 0)
+                    {
+                        int cand = heights[v] + 1;
+                        while (Conflicts(u, cand, heights, adj)) cand++;
+                        heights[u] = cand;
+                        q.Enqueue(u);
+                    }
+            }
+        }
+
+        // 4. Пересадочные пары — не на одной высоте (если хоть одну можно сдвинуть)
+        for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++)
+            if (transfers[i].Contains(j) && heights[i] == heights[j])
+            {
+                int raise = (data.lines[j].heightLayer < 0) ? j :
+                            (data.lines[i].heightLayer < 0) ? i : -1;
+                if (raise >= 0)
                 {
-                    adj[i].Add(j); adj[j].Add(i);
-                    if (tr) { transfers[i].Add(j); transfers[j].Add(i); }
+                    int cand = heights[raise] + 1;
+                    while (Conflicts(raise, cand, heights, adj)) cand++;
+                    heights[raise] = cand;
                 }
             }
-
-            for (int i = 0; i < n; i++) heights[i] = -1;
-
-            for (int start = 0; start < n; start++)
-            {
-                if (heights[start] >= 0) continue;
-                heights[start] = 0;
-                var q = new Queue<int>();
-                q.Enqueue(start);
-                while (q.Count > 0)
-                {
-                    int v = q.Dequeue();
-                    foreach (int u in adj[v])
-                        if (heights[u] < 0) { heights[u] = heights[v] + 1; q.Enqueue(u); }
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            for (int j = i + 1; j < n; j++)
-                if (transfers[i].Contains(j) && heights[i] == heights[j])
-                {
-                    int candidate = heights[j] + 1;
-                    while (Conflicts(j, candidate, heights, adj)) candidate++;
-                    heights[j] = candidate;
-                }
-        }
 
         lineHeights.Clear();
         for (int i = 0; i < n; i++) lineHeights[data.lines[i].id] = heights[i];
@@ -203,7 +215,9 @@ public class MetroMapBuilder : MonoBehaviour
         if (logVerbose)
         {
             var parts = new List<string>();
-            for (int i = 0; i < n; i++) parts.Add($"{data.lines[i].id}={heights[i]}");
+            for (int i = 0; i < n; i++)
+                parts.Add($"{data.lines[i].id}={heights[i]}" +
+                        (data.lines[i].heightLayer >= 0 ? "(cfg)" : "(auto)"));
             Debug.Log("[MetroMap] Heights: " + string.Join(", ", parts));
         }
     }
@@ -449,8 +463,8 @@ public class MetroMapBuilder : MonoBehaviour
     }
 
     private void BuildTunnel(LineContext ctx,
-                             Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3,
-                             float trimStart, float trimEnd, Transform parent)
+                            Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3,
+                            float trimStart, float trimEnd, Transform parent)
     {
         int subdiv = Mathf.Max(8, data.settings.smoothingSubdivisions * 2);
         var raw = new List<Vector3>();
@@ -459,22 +473,25 @@ public class MetroMapBuilder : MonoBehaviour
         var trimmed = TrimPathEnds(raw, trimStart, trimEnd);
         if (trimmed.Count < 2) return;
 
-        var resampled = ResamplePath(trimmed, ctx.tunnelSegmentLength);
-        if (resampled.Count < 2) return;
-
+        // ВАЖНО: сначала оффсет по trimmed, а потом ресемпл —
+        // тогда последний сегмент оффсета точно совпадает с краем станции/депо.
         for (int side = 0; side < 2; side++)
         {
             float sign = side == 0 ? -1f : 1f;
-            var offsetPath = OffsetPath(resampled, data.settings.trackSpacing * 0.5f * sign);
+            var offsetPath = OffsetPath(trimmed, data.settings.trackSpacing * 0.5f * sign);
+            var resampled  = ResamplePath(offsetPath, ctx.tunnelSegmentLength);
+            if (resampled.Count < 2) continue;
 
-            for (int k = 0; k < offsetPath.Count - 1; k++)
+            for (int k = 0; k < resampled.Count - 1; k++)
             {
-                Vector3 a = offsetPath[k];
-                Vector3 b = offsetPath[k + 1];
-                Vector3 mid = (a + b) * 0.5f;
+                Vector3 a = resampled[k];
+                Vector3 b = resampled[k + 1];
                 Vector3 d = b - a;
-                if (d.sqrMagnitude < 0.0001f) continue;
-                SpawnTunnel(ctx, mid, Quaternion.LookRotation(d.normalized, Vector3.up), parent);
+                float len = d.magnitude;
+                if (len < 0.0001f) continue;
+
+                Vector3 mid = (a + b) * 0.5f;
+                SpawnTunnel(ctx, mid, Quaternion.LookRotation(d / len, Vector3.up), len, parent);
             }
         }
     }
@@ -498,6 +515,8 @@ public class MetroMapBuilder : MonoBehaviour
 
         float startDist = Mathf.Clamp(trimStart, 0f, total * 0.45f);
         float endDist   = Mathf.Clamp(total - trimEnd, startDist + 0.01f, total);
+        if (endDist - startDist < 0.02f)
+            return new List<Vector3>(); // тоннеля быть не должно 
 
         var result = new List<Vector3>();
         float walked = 0;
@@ -556,6 +575,13 @@ public class MetroMapBuilder : MonoBehaviour
                 segIdx++;
             }
         }
+        // Гарантия, что последняя точка path попадёт в результат —
+        // иначе последний сегмент не дотянется до края станции.
+        if (result.Count == 0 ||
+            Vector3.Distance(result[result.Count - 1], path[path.Count - 1]) > 0.001f)
+        {
+            result.Add(path[path.Count - 1]);
+        }
         return result;
     }
 
@@ -593,11 +619,30 @@ public class MetroMapBuilder : MonoBehaviour
         SpawnOrFallback(prefab, pos, rot, $"Depot_{line.id}_{suffix}", ctx.depotLength, parent);
     }
 
-    private void SpawnTunnel(LineContext ctx, Vector3 pos, Quaternion rot, Transform parent)
+    private void SpawnTunnel(LineContext ctx, Vector3 pos, Quaternion rot, float targetLength, Transform parent)
     {
         var prefab = ResolvePrefab(ctx.ov, "tunnelSegment");
         var go = SpawnOrFallback(prefab, pos, rot, $"Tunnel_{ctx.line.id}", ctx.tunnelSegmentLength * 0.5f, parent);
         if (go == null) return;
+
+        // Растягиваем по локальной Z так, чтобы сегмент точно занял отрезок [a..b].
+        // Это гарантирует, что последний сегмент дотянется до края станции/депо.
+        if (prefab != null && targetLength > 0.0001f)
+        {
+            // ctx.tunnelSegmentLength измеряется у префаба с localScale = 1,
+            // а экземпляр наследует localScale префаба. Учитываем это:
+            float prefabScaleZ = prefab.transform.localScale.z;
+            float baseLen = ctx.tunnelSegmentLength * prefabScaleZ;
+
+            if (baseLen > 0.0001f)
+            {
+                var s = go.transform.localScale;
+                s.z *= targetLength / baseLen;
+                go.transform.localScale = s;
+            }
+        }
+        // Для fallback (когда префаба нет) масштабирование не нужно.
+
         var rend = go.GetComponentInChildren<Renderer>();
         if (rend != null && colorMap.TryGetValue(ctx.line.colorKey, out var col))
             rend.material.color = col;
