@@ -11,6 +11,8 @@ using UnityEditor.SceneManagement;
 [AddComponentMenu("Metro/Metro Line Switcher")]
 public class MetroLineSwitcher : MonoBehaviour
 {
+    public enum TrainDirection { Forward, Reverse }
+
     [Header("References")]
     [SerializeField] private MetroMapBuilder mapBuilder;
     [SerializeField] private GameObject trainPrefab;
@@ -22,9 +24,15 @@ public class MetroLineSwitcher : MonoBehaviour
     [SerializeField] private string startLineId = "";
 
     [Header("Train")]
-    [Tooltip("Индекс маркера (0-based), на котором спавнить поезд. 1 = ВТОРОЙ маркер от начала.")]
+    [Tooltip("Направление спавна:\n" +
+             "Forward — по цепочке 'Markers' (прямой ход);\n" +
+             "Reverse — по цепочке 'MarkersReverse' (обратный ход).")]
+    [SerializeField] private TrainDirection trainDirection = TrainDirection.Forward;
+
+    [Tooltip("Индекс маркера (0-based) в выбранной цепочке. 1 = ВТОРОЙ маркер от начала выбранного направления.")]
     [Min(0)]
     [SerializeField] private int trainStartMarkerIndex = 1;
+
     [Tooltip("Спавнить поезд при каждом переключении линии.")]
     [SerializeField] private bool spawnTrainOnSwitch = true;
     [Tooltip("Уничтожать предыдущий поезд перед спавном нового.")]
@@ -37,37 +45,27 @@ public class MetroLineSwitcher : MonoBehaviour
 
     // ---------------- Public state ----------------
 
-    /// <summary>id линии, которая сейчас включена.</summary>
     public string CurrentLineId { get; private set; }
-
-    /// <summary>Текущий заспавненный поезд (может быть null).</summary>
     public GameObject CurrentTrain { get; private set; }
-
-    /// <summary>Маркер, на котором стоит текущий поезд (может быть null).</summary>
     public TrainTrackMarker CurrentTrainMarker { get; private set; }
-
-    /// <summary>Все id линий, найденные в сцене (Line_&lt;id&gt;).</summary>
     public IReadOnlyList<string> LineIds => _lineIds;
-
-    /// <summary>Ссылка на MetroMapBuilder.</summary>
     public MetroMapBuilder MapBuilder => mapBuilder;
+    public TrainDirection Direction => trainDirection;
 
     // ---------------- Events ----------------
 
-    /// <summary>Вызывается после успешного переключения линии (параметр — id).</summary>
     public event Action<string> OnLineSwitched;
-
-    /// <summary>Вызывается после спавна поезда: (поезд, стартовый маркер).</summary>
     public event Action<GameObject, TrainTrackMarker> OnTrainSpawned;
-
-    /// <summary>Вызывается после RebuildMapAndRespawn.</summary>
     public event Action OnMapRebuilt;
+    public event Action<TrainDirection> OnDirectionChanged;
 
     // ---------------- Internal ----------------
 
     private readonly List<string> _lineIds = new List<string>();
-    private const string LinePrefix = "Line_";
-    private const string TrainRootName = "MetroTrains";
+    private const string LinePrefix     = "Line_";
+    private const string FwdMarkersRoot = "Markers";
+    private const string RevMarkersRoot = "MarkersReverse";
+    private const string TrainRootName  = "MetroTrains";
 
     private void Awake()
     {
@@ -82,7 +80,6 @@ public class MetroLineSwitcher : MonoBehaviour
             return;
         }
 
-        // К этому моменту (DefaultExecutionOrder 200) Start у MetroMapBuilder уже отработал.
         if (mapBuilder.transform.childCount == 0)
         {
             if (buildMapIfMissing) mapBuilder.Build();
@@ -100,7 +97,6 @@ public class MetroLineSwitcher : MonoBehaviour
             return;
         }
 
-        // Убираем поезда, оставшиеся от Edit Mode-сессии
         ClearAllTrains();
 
         string target = (!string.IsNullOrEmpty(startLineId) && _lineIds.Contains(startLineId))
@@ -111,7 +107,6 @@ public class MetroLineSwitcher : MonoBehaviour
 
     // ---------------- Public API ----------------
 
-    /// <summary>Обновить список линий, прочитав дочерние объекты Line_* у MetroMapBuilder.</summary>
     public void RefreshLineList()
     {
         _lineIds.Clear();
@@ -125,13 +120,8 @@ public class MetroLineSwitcher : MonoBehaviour
         }
     }
 
-    /// <summary>Снимок списка линий (для редактора и внешних вызовов).</summary>
     public List<string> GetLineIdsSnapshot() => new List<string>(_lineIds);
 
-    /// <summary>
-    /// Включить указанную линию, выключить остальные, при необходимости заспавнить поезд.
-    /// Если lineId = null/пусто — включит первую доступную.
-    /// </summary>
     public void SwitchToLine(string lineId)
     {
         if (string.IsNullOrEmpty(lineId))
@@ -158,12 +148,11 @@ public class MetroLineSwitcher : MonoBehaviour
             SpawnTrainOnLine(lineId);
 
         if (logVerbose)
-            Debug.Log($"[MetroLineSwitcher] Активна линия '{lineId}'", this);
+            Debug.Log($"[MetroLineSwitcher] Активна линия '{lineId}' ({trainDirection})", this);
 
         OnLineSwitched?.Invoke(lineId);
     }
 
-    /// <summary>Переключиться на следующую линию (циклически).</summary>
     public void SwitchToNextLine()
     {
         if (_lineIds.Count == 0) RefreshLineList();
@@ -173,7 +162,6 @@ public class MetroLineSwitcher : MonoBehaviour
         SwitchToLine(_lineIds[next]);
     }
 
-    /// <summary>Переключиться на предыдущую линию (циклически).</summary>
     public void SwitchToPreviousLine()
     {
         if (_lineIds.Count == 0) RefreshLineList();
@@ -183,7 +171,6 @@ public class MetroLineSwitcher : MonoBehaviour
         SwitchToLine(_lineIds[prev]);
     }
 
-    /// <summary>Перестроить карту (MetroMapBuilder.Build) и переключиться на ту же/первую линию.</summary>
     public void RebuildMapAndRespawn()
     {
         if (mapBuilder == null) { Debug.LogError("[MetroLineSwitcher] mapBuilder не задан."); return; }
@@ -196,10 +183,25 @@ public class MetroLineSwitcher : MonoBehaviour
         OnMapRebuilt?.Invoke();
     }
 
-    /// <summary>
-    /// Заспавнить поезд на указанной линии (или на текущей, если передать null).
-    /// Возвращает инстанс поезда или null.
-    /// </summary>
+    /// <summary>Сменить направление спавна (Forward/Reverse). Опционально — сразу переспавнить поезд.</summary>
+    public void SetDirection(TrainDirection dir, bool respawn = true)
+    {
+        bool changed = trainDirection != dir;
+        trainDirection = dir;
+        if (changed) OnDirectionChanged?.Invoke(dir);
+
+        if (respawn && !string.IsNullOrEmpty(CurrentLineId))
+            SpawnTrainOnLine(CurrentLineId);
+    }
+
+    /// <summary>Переключить Forward ↔ Reverse. Опционально — переспавнить.</summary>
+    public void ToggleDirection(bool respawn = true)
+    {
+        SetDirection(trainDirection == TrainDirection.Forward
+            ? TrainDirection.Reverse
+            : TrainDirection.Forward, respawn);
+    }
+
     public GameObject SpawnTrainOnLine(string lineId)
     {
         if (string.IsNullOrEmpty(lineId)) lineId = CurrentLineId;
@@ -222,10 +224,10 @@ public class MetroLineSwitcher : MonoBehaviour
             return null;
         }
 
-        var markers = CollectMarkers(lineRoot);
+        var markers = CollectMarkers(lineRoot, trainDirection);
         if (markers.Count == 0)
         {
-            Debug.LogWarning($"[MetroLineSwitcher] На линии '{lineId}' нет маркеров.", this);
+            Debug.LogWarning($"[MetroLineSwitcher] На линии '{lineId}' нет маркеров ({trainDirection}).", this);
             return null;
         }
 
@@ -241,19 +243,18 @@ public class MetroLineSwitcher : MonoBehaviour
 
         var root = GetTrainRoot();
         var go = Instantiate(trainPrefab, marker.transform.position, marker.transform.rotation, root);
-        go.name = $"Train_{lineId}";
+        go.name = $"Train_{lineId}_{trainDirection}";
 
         CurrentTrain = go;
         CurrentTrainMarker = marker;
 
         if (logVerbose)
-            Debug.Log($"[MetroLineSwitcher] Поезд на линии '{lineId}', маркер #{idx} ({marker.name})", go);
+            Debug.Log($"[MetroLineSwitcher] Поезд ({trainDirection}) на линии '{lineId}', маркер #{idx} ({marker.name})", go);
 
         OnTrainSpawned?.Invoke(go, marker);
         return go;
     }
 
-    /// <summary>Удалить все поезда, заспавненные этим свитчером.</summary>
     public void ClearAllTrains()
     {
         if (CurrentTrain != null) DestroySafe(CurrentTrain);
@@ -268,7 +269,6 @@ public class MetroLineSwitcher : MonoBehaviour
             DestroySafe(root.GetChild(i).gameObject);
     }
 
-    /// <summary>Получить GameObject линии Line_&lt;id&gt;.</summary>
     public GameObject GetLineRoot(string lineId)
     {
         if (mapBuilder == null || string.IsNullOrEmpty(lineId)) return null;
@@ -303,20 +303,29 @@ public class MetroLineSwitcher : MonoBehaviour
         return trainRoot;
     }
 
-    /// <summary>Собирает маркеры линии в порядке цепочки nextForward (или по имени, если связей нет).</summary>
-    private List<TrainTrackMarker> CollectMarkers(GameObject lineRoot)
+    /// <summary>Маркеры линии в порядке связного списка nextForward для выбранного направления.</summary>
+    private List<TrainTrackMarker> CollectMarkers(GameObject lineRoot, TrainDirection direction)
     {
         var result = new List<TrainTrackMarker>();
         if (lineRoot == null) return result;
 
-        Transform markersRoot = lineRoot.transform.Find("Markers");
-        if (markersRoot == null) markersRoot = lineRoot.transform.Find("MarkersReverse");
+        string preferred = direction == TrainDirection.Reverse ? RevMarkersRoot : FwdMarkersRoot;
+        string fallback  = direction == TrainDirection.Reverse ? FwdMarkersRoot : RevMarkersRoot;
+
+        Transform markersRoot = lineRoot.transform.Find(preferred);
+        if (markersRoot == null)
+        {
+            markersRoot = lineRoot.transform.Find(fallback);
+            if (markersRoot != null)
+                Debug.LogWarning($"[MetroLineSwitcher] '{preferred}' не найдено на '{lineRoot.name}' — использую '{fallback}'. " +
+                                 $"Возможно, в MetroMapBuilder выключен generateReverseMarkers.", this);
+        }
         if (markersRoot == null) return result;
 
         var all = markersRoot.GetComponentsInChildren<TrainTrackMarker>();
         if (all.Length == 0) return result;
 
-        // Ищем голову связного списка (nextBackward == null) и проходим по nextForward
+        // Голова связного списка — та, у которой нет nextBackward
         TrainTrackMarker head = null;
         foreach (var m in all)
             if (m.nextBackward == null) { head = m; break; }
@@ -348,12 +357,12 @@ public class MetroLineSwitcher : MonoBehaviour
 
     // ---------------- Context menu ----------------
 
-    [ContextMenu("Switch To Next Line")]     private void CtxNext()      => SwitchToNextLine();
-    [ContextMenu("Switch To Previous Line")] private void CtxPrev()      => SwitchToPreviousLine();
-    [ContextMenu("Rebuild Map & Respawn")]   private void CtxRebuild()   => RebuildMapAndRespawn();
-    [ContextMenu("Clear All Trains")]        private void CtxClear()     => ClearAllTrains();
+    [ContextMenu("Switch To Next Line")]     private void CtxNext()    => SwitchToNextLine();
+    [ContextMenu("Switch To Previous Line")] private void CtxPrev()    => SwitchToPreviousLine();
+    [ContextMenu("Rebuild Map & Respawn")]   private void CtxRebuild() => RebuildMapAndRespawn();
+    [ContextMenu("Clear All Trains")]        private void CtxClear()   => ClearAllTrains();
+    [ContextMenu("Toggle Direction & Respawn")] private void CtxDir()  => ToggleDirection(true);
 }
-
 
 #if UNITY_EDITOR
 [CustomEditor(typeof(MetroLineSwitcher))]
@@ -367,9 +376,10 @@ public class MetroLineSwitcherEditor : Editor
 
         EditorGUILayout.HelpBox(
             "Оставляет включённой только одну линию (Line_*) и спавнит поезд на заданном маркере.\n" +
+            "Direction: Forward — по 'Markers', Reverse — по 'MarkersReverse'.\n" +
             "Работает в Edit Mode (кнопки ниже) и в Play Mode (через Start).\n" +
-            "Публичное API: SwitchToLine / SwitchToNextLine / SwitchToPreviousLine /\n" +
-            "SpawnTrainOnLine / ClearAllTrains / RebuildMapAndRespawn + события OnLineSwitched, OnTrainSpawned, OnMapRebuilt.",
+            "API: SwitchToLine / SwitchToNextLine / SwitchToPreviousLine / SetDirection / ToggleDirection /\n" +
+            "SpawnTrainOnLine / ClearAllTrains / RebuildMapAndRespawn + события.",
             MessageType.Info);
 
         DrawDefaultInspector();
@@ -410,6 +420,27 @@ public class MetroLineSwitcherEditor : Editor
 
         EditorGUILayout.Space(8);
 
+        EditorGUILayout.LabelField("Направление поезда", EditorStyles.boldLabel);
+        EditorGUILayout.BeginHorizontal();
+        GUI.backgroundColor = sw.Direction == MetroLineSwitcher.TrainDirection.Forward
+            ? new Color(0.6f, 1f, 0.6f) : Color.white;
+        if (GUILayout.Button("→ Forward (Markers)"))
+        {
+            sw.SetDirection(MetroLineSwitcher.TrainDirection.Forward, true);
+            MarkDirty(sw);
+        }
+        GUI.backgroundColor = sw.Direction == MetroLineSwitcher.TrainDirection.Reverse
+            ? new Color(0.6f, 0.85f, 1f) : Color.white;
+        if (GUILayout.Button("← Reverse (MarkersReverse)"))
+        {
+            sw.SetDirection(MetroLineSwitcher.TrainDirection.Reverse, true);
+            MarkDirty(sw);
+        }
+        GUI.backgroundColor = Color.white;
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(8);
+
         GUI.backgroundColor = new Color(1f, 0.9f, 0.55f);
         if (GUILayout.Button("↻ Перестроить карту и переключиться", GUILayout.Height(30)))
         {
@@ -418,7 +449,7 @@ public class MetroLineSwitcherEditor : Editor
         }
 
         GUI.backgroundColor = new Color(0.65f, 1f, 0.65f);
-        if (GUILayout.Button("🚂 Спавнить поезд на текущей линии"))
+        if (GUILayout.Button($"🚂 Спавнить поезд на текущей линии ({sw.Direction})"))
         {
             sw.SpawnTrainOnLine(sw.CurrentLineId);
             MarkDirty(sw);
@@ -435,6 +466,7 @@ public class MetroLineSwitcherEditor : Editor
         EditorGUILayout.Space(6);
         EditorGUILayout.LabelField("State", EditorStyles.boldLabel);
         EditorGUILayout.LabelField("CurrentLineId",      sw.CurrentLineId ?? "—");
+        EditorGUILayout.LabelField("Direction",          sw.Direction.ToString());
         EditorGUILayout.LabelField("CurrentTrain",       sw.CurrentTrain != null ? sw.CurrentTrain.name : "—");
         EditorGUILayout.LabelField("CurrentTrainMarker", sw.CurrentTrainMarker != null ? sw.CurrentTrainMarker.name : "—");
     }
@@ -448,4 +480,3 @@ public class MetroLineSwitcherEditor : Editor
     }
 }
 #endif
-

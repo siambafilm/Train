@@ -29,3 +29,18 @@ public class GameController : MonoBehaviour
         else    switcher.ClearAllTrains();
     }
 }
+
+public class TrainTestDriver : MonoBehaviour
+{
+    [SerializeField] private MetroLineSwitcher switcher;
+
+    void OnEnable()
+    {
+        switcher.OnDirectionChanged += dir => Debug.Log($"Direction → {dir}");
+        switcher.OnTrainSpawned    += (go, marker) => Debug.Log($"Train spawned at {marker.name}");
+    }
+
+    public void GoReverse() => switcher.SetDirection(MetroLineSwitcher.TrainDirection.Reverse, respawn: true);
+    public void GoForward() => switcher.SetDirection(MetroLineSwitcher.TrainDirection.Forward, respawn: true);
+    public void Toggle()    => switcher.ToggleDirection();
+}
