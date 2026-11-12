@@ -1,0 +1,31 @@
+
+//sample: using from other scripts
+public class GameController : MonoBehaviour
+{
+    [SerializeField] private MetroLineSwitcher switcher;
+
+    private void OnEnable()
+    {
+        switcher.OnLineSwitched += HandleLineSwitched;
+        switcher.OnTrainSpawned += (train, marker) =>
+        {
+            // например, если у поезда есть поле currentMarker — можно присвоить:
+            // train.GetComponent<TrainController>().StartFrom(marker);
+        };
+    }
+
+    private void OnDisable() => switcher.OnLineSwitched -= HandleLineSwitched;
+
+    private void HandleLineSwitched(string lineId) { /* ... */ }
+
+    // Ручное переключение
+    public void GoToRedLine() => switcher.SwitchToLine("red");
+    public void NextLine()    => switcher.SwitchToNextLine();
+
+    // Полное API
+    public void ToggleTrains(bool on)
+    {
+        if (on) switcher.SpawnTrainOnLine(switcher.CurrentLineId);
+        else    switcher.ClearAllTrains();
+    }
+}
