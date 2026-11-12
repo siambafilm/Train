@@ -59,6 +59,9 @@ public class MetroMapBuilder : MonoBehaviour
 
     [Header("Markers")]
     [SerializeField] private bool generateMarkers = true;
+    [Tooltip("Создавать дополнительную цепочку маркеров для обратного направления " +
+             "(по второму тоннелю / второй нити).")]
+    [SerializeField] private bool generateReverseMarkers = true;
     [SerializeField] private GameObject markerPrefab;
     [Min(0.5f)]
     [SerializeField] private float markerSpacing = 20f;
@@ -519,16 +522,21 @@ public class MetroMapBuilder : MonoBehaviour
             nodes.Add(node);
         }
 
-        // Тоннели + осевая линия для маркеров
-        var fullCenterline = new List<Vector3>();
-        var fullIsStation  = new List<bool>();
+        // Тоннели + осевая линия для маркеров (прямой и обратный ход)
+        var fullCenterline         = new List<Vector3>();
+        var fullIsStation          = new List<bool>();
+        var fullReverseCenterline  = new List<Vector3>();
+        var fullReverseIsStation   = new List<bool>();
 
         for (int i = 0; i < nodes.Count - 1; i++)
         {
-            BuildTunnelBetween(nodes[i], nodes[i+1], ctx, lineRoot.transform, fullCenterline, fullIsStation);
+            BuildTunnelBetween(nodes[i], nodes[i+1], ctx, lineRoot.transform,
+                fullCenterline, fullIsStation,
+                fullReverseCenterline, fullReverseIsStation);
 
             if (nodes[i+1].isStation)
             {
+                // --- Станция: прямой ход ---
                 if (fullCenterline.Count > 0 &&
                     Vector3.Distance(fullCenterline[fullCenterline.Count - 1], nodes[i+1].railEntry) < 0.001f)
                     fullIsStation[fullCenterline.Count - 1] = true;
@@ -545,19 +553,48 @@ public class MetroMapBuilder : MonoBehaviour
                     fullCenterline.Add(pt);
                     fullIsStation.Add(true);
                 }
+
+                // --- Станция: обратный ход (смещённая копия) ---
+                if (TryGetReverseOffset(nodes[i+1], out Vector3 offset))
+                {
+                    Vector3 re = e + offset;
+                    Vector3 rx = x + offset;
+
+                    if (fullReverseCenterline.Count > 0 &&
+                        Vector3.Distance(fullReverseCenterline[fullReverseCenterline.Count - 1], re) < 0.001f)
+                        fullReverseIsStation[fullReverseCenterline.Count - 1] = true;
+
+                    for (int k = 1; k <= straightSamples; k++)
+                    {
+                        float s = (float)k / straightSamples;
+                        Vector3 pt = Vector3.Lerp(re, rx, s);
+                        if (fullReverseCenterline.Count > 0 &&
+                            Vector3.Distance(fullReverseCenterline[fullReverseCenterline.Count - 1], pt) < 0.001f) continue;
+                        fullReverseCenterline.Add(pt);
+                        fullReverseIsStation.Add(true);
+                    }
+                }
             }
         }
 
-        // Маркеры — логика НЕ ТРОНУТА
+        // --- Маркеры прямого хода ---
         if (generateMarkers && markerPrefab != null)
         {
             var markersRoot = new GameObject("Markers");
             markersRoot.transform.SetParent(lineRoot.transform, false);
-            BuildMarkersAlong(fullCenterline, fullIsStation, markersRoot.transform);
+            BuildMarkersAlong(fullCenterline, fullIsStation, markersRoot.transform, "Marker");
         }
         else if (generateMarkers && markerPrefab == null)
         {
             Debug.LogWarning($"[MetroMap] generateMarkers = true, но markerPrefab не задан (line={line.id})", this);
+        }
+
+        // --- Маркеры обратного хода ---
+        if (generateMarkers && generateReverseMarkers && markerPrefab != null && fullReverseCenterline.Count >= 2)
+        {
+            var markersRootRev = new GameObject("MarkersReverse");
+            markersRootRev.transform.SetParent(lineRoot.transform, false);
+            BuildMarkersAlongReverse(fullReverseCenterline, fullReverseIsStation, markersRootRev.transform, "MarkerRev");
         }
     }
 
@@ -567,7 +604,8 @@ public class MetroMapBuilder : MonoBehaviour
 
     private void BuildTunnelBetween(
         PathNode from, PathNode to, LineContext ctx, Transform parent,
-        List<Vector3> fullCenterline, List<bool> fullIsStation)
+        List<Vector3> fullCenterline, List<bool> fullIsStation,
+        List<Vector3> fullReverseCenterline, List<bool> fullReverseIsStation)
     {
         Vector3 p0 = from.railExit;
         Vector3 p1 = to.railEntry;
@@ -589,7 +627,7 @@ public class MetroMapBuilder : MonoBehaviour
             centerline.Add(HermitePoint(p0, m0, p1, m1, s));
         }
 
-        // --- Копим осевую для маркеров (ЛОГИКА НЕ ТРОНУТА) ---
+        // --- Копим осевую для прямых маркеров ---
         for (int k = 0; k < centerline.Count; k++)
         {
             if (fullCenterline.Count > 0 &&
@@ -599,7 +637,9 @@ public class MetroMapBuilder : MonoBehaviour
             fullIsStation.Add(false);
         }
 
-        // --- Спавн тоннелей по выбранному режиму ---
+        // --- Спавн тоннелей и сбор обратного пути ---
+        List<Vector3> reversePath = null;
+
         switch (tunnelMode)
         {
             case TunnelMode.SingleCenterline:
@@ -608,7 +648,7 @@ public class MetroMapBuilder : MonoBehaviour
 
             case TunnelMode.TwoTunnels:
             {
-                // Тоннель 1 — точно по осевой (там же, где маркеры)
+                // Тоннель 1 — точно по осевой (там же, где прямые маркеры)
                 SpawnTunnelAlong(centerline, ctx, parent);
 
                 // Тоннель 2 — смещён на trackSpacing вправо от направления движения
@@ -616,7 +656,6 @@ public class MetroMapBuilder : MonoBehaviour
                 {
                     var offsetPath = OffsetCenterline(centerline, trackSpacing);
 
-                    // Жёсткая привязка краёв к торцу станции
                     if (offsetPath.Count >= 2)
                     {
                         Vector3 rightStart = Vector3.Cross(Vector3.up, t0).normalized;
@@ -626,13 +665,13 @@ public class MetroMapBuilder : MonoBehaviour
                     }
 
                     SpawnTunnelAlong(offsetPath, ctx, parent);
+                    reversePath = offsetPath;
                 }
                 break;
             }
 
             case TunnelMode.TwoRails:
             {
-                // Старое симметричное поведение: ±trackSpacing/2
                 for (int side = 0; side < 2; side++)
                 {
                     float sign = side == 0 ? 1f : -1f;
@@ -647,9 +686,53 @@ public class MetroMapBuilder : MonoBehaviour
                     }
 
                     SpawnTunnelAlong(railPath, ctx, parent);
+
+                    // Левая нить (sign<0) считается путём обратного хода
+                    if (sign < 0) reversePath = railPath;
                 }
                 break;
             }
+        }
+
+        // --- Копим обратный путь для маркеров обратного хода ---
+        if (reversePath != null && fullReverseCenterline != null)
+        {
+            for (int k = 0; k < reversePath.Count; k++)
+            {
+                if (fullReverseCenterline.Count > 0 &&
+                    Vector3.Distance(fullReverseCenterline[fullReverseCenterline.Count - 1], reversePath[k]) < 0.001f)
+                    continue;
+                fullReverseCenterline.Add(reversePath[k]);
+                fullReverseIsStation.Add(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Смещение обратного пути относительно осевой в точке узла.
+    /// Возвращает false, если для текущего режима обратного пути нет.
+    /// </summary>
+    private bool TryGetReverseOffset(PathNode node, out Vector3 offset)
+    {
+        offset = Vector3.zero;
+        Vector3 r = Vector3.Cross(Vector3.up, node.travelForward);
+        if (r.sqrMagnitude < 0.0001f) return false;
+        r.Normalize();
+
+        switch (tunnelMode)
+        {
+            case TunnelMode.TwoTunnels:
+                if (Mathf.Abs(trackSpacing) < 0.0001f) return false;
+                offset = r * trackSpacing;
+                return true;
+
+            case TunnelMode.TwoRails:
+                if (Mathf.Abs(trackSpacing) < 0.0001f) return false;
+                offset = r * (-trackSpacing * 0.5f); // левая нить
+                return true;
+
+            default:
+                return false;
         }
     }
 
@@ -787,10 +870,26 @@ public class MetroMapBuilder : MonoBehaviour
     }
 
     // ==========================================================
-    //  MARKERS (ЛОГИКА НЕ ТРОНУТА)
+    //  MARKERS
     // ==========================================================
 
-    private void BuildMarkersAlong(List<Vector3> path, List<bool> isStation, Transform parent)
+    private void BuildMarkersAlong(List<Vector3> path, List<bool> isStation, Transform parent, string namePrefix)
+    {
+        BuildMarkersAlongImpl(path, isStation, parent, namePrefix, false);
+    }
+
+    private void BuildMarkersAlongReverse(List<Vector3> path, List<bool> isStation, Transform parent, string namePrefix)
+    {
+        // Разворачиваем путь целиком — тангенсы и порядок станут обратными автоматически
+        var revPath = new List<Vector3>(path);
+        revPath.Reverse();
+        var revIsStation = new List<bool>(isStation);
+        revIsStation.Reverse();
+
+        BuildMarkersAlongImpl(revPath, revIsStation, parent, namePrefix, true);
+    }
+
+    private void BuildMarkersAlongImpl(List<Vector3> path, List<bool> isStation, Transform parent, string namePrefix, bool isReverse)
     {
         if (path.Count < 2) return;
 
@@ -817,11 +916,11 @@ public class MetroMapBuilder : MonoBehaviour
             bool inStation = isStation[Mathf.Clamp(idx, 0, isStation.Count - 1)];
 
             var go = Instantiate(markerPrefab, pos, rot, parent);
-            go.name = $"Marker_{i:D3}";
+            go.name = $"{namePrefix}_{i:D3}";
 
             var m = go.GetComponent<TrainTrackMarker>();
             if (m == null) m = go.AddComponent<TrainTrackMarker>();
-            m.cameraMode  = inStation ? stationMarkerCameraMode : tunnelMarkerCameraMode;
+            m.cameraMode    = inStation ? stationMarkerCameraMode : tunnelMarkerCameraMode;
             m.isSwitchPoint = false;
             markers.Add(m);
         }
@@ -832,7 +931,8 @@ public class MetroMapBuilder : MonoBehaviour
             if (i > 0)                 markers[i].nextBackward = markers[i - 1];
         }
 
-        if (logVerbose) Debug.Log($"[MetroMap] {markers.Count} markers generated");
+        if (logVerbose)
+            Debug.Log($"[MetroMap] {markers.Count} {(isReverse ? "REVERSE " : "")}markers generated");
     }
 
     private int FindClosestIndex(float[] cum, float arc)
