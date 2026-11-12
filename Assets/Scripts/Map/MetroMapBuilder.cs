@@ -4,65 +4,85 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
+[DisallowMultipleComponent]
 public class MetroMapBuilder : MonoBehaviour
 {
+    public enum TunnelPivot { Center, Start, End }
+    public enum TunnelMode { TwoTunnels, TwoRails, SingleCenterline }
+
     [Header("Data")]
     [SerializeField] private string dataResourceName = "metro_map";
     [SerializeField] private bool generateOnStart = true;
 
     [Header("Per-Line Prefabs (override JSON)")]
-    [Tooltip("Для каждой ветки можно задать свои префабы и длины. " +
-             "Если поле не задано — используется глобальный префаб из JSON. " +
-             "ПКМ по заголовку компонента → Populate Line Overrides From JSON")]
     [SerializeField] private List<LinePrefabOverride> linePrefabOverrides = new List<LinePrefabOverride>();
 
+    [Header("Track Layout")]
+    [Tooltip("Режим тоннелей:\n" +
+             "TwoTunnels       — тоннель 1 точно по маркерам (осевая), тоннель 2 смещён на trackSpacing вправо.\n" +
+             "TwoRails         — два симметричных тоннеля на ±trackSpacing/2 от осевой.\n" +
+             "SingleCenterline — один тоннель ровно по осевой.")]
+    [SerializeField] private TunnelMode tunnelMode = TunnelMode.TwoTunnels;
+
+    [Tooltip("Для TwoTunnels: смещение второго тоннеля от первого.\n" +
+             "Для TwoRails: расстояние между двумя симметричными тоннелями.\n" +
+             "Для SingleCenterline не используется.\n" +
+             "Отрицательное значение = смещение влево.")]
+    [SerializeField] private float trackSpacing = 1.5f;
+
+    [Tooltip("Где находится pivot у префаба сегмента тоннеля.\n" +
+             "Center — pivot в середине сегмента;\n" +
+             "Start  — pivot в начале (длина вдоль +Z);\n" +
+             "End    — pivot в конце (длина вдоль -Z).")]
+    [SerializeField] private TunnelPivot tunnelPivot = TunnelPivot.Center;
+
+    [Header("Tunnel Curve")]
+    [Tooltip("Натяжение касательных Hermite-кривой на концах тоннеля.\n" +
+             "0 — прямая между стыками; 1 — естественная кривая; >1 — резче у станции.")]
+    [Range(0f, 3f)]
+    [SerializeField] private float tangentStrength = 1f;
+
+    [Tooltip("Количество точек Hermite-кривой на один тоннель.")]
+    [Min(8)]
+    [SerializeField] private int tunnelSamples = 32;
+
+    [Tooltip("Минимальная длина тоннеля. Если суммарная длина меньше — тоннель не строится.")]
+    [Min(0.01f)]
+    [SerializeField] private float minTunnelLength = 0.5f;
+
+    [Header("Anchors (опционально)")]
+    [Tooltip("Имя дочернего объекта префаба станции/депо — точка ВХОДА рельса.")]
+    [SerializeField] private string anchorEntryName = "RailEntryAnchor";
+
+    [Tooltip("Имя дочернего объекта префаба станции/депо — точка ВЫХОДА рельса.")]
+    [SerializeField] private string anchorExitName = "RailExitAnchor";
+
     [Header("Markers")]
-    [Tooltip("Генерировать маркеры пути вдоль каждой ветки (в отдельном объекте 'Markers' внутри ветки)")]
     [SerializeField] private bool generateMarkers = true;
-
-    [Tooltip("Префаб маркера — объект с компонентом TrainTrackMarker (pivot в начале, смотрит по +Z)")]
     [SerializeField] private GameObject markerPrefab;
-
-    [Tooltip("Расстояние между маркерами вдоль пути")]
     [Min(0.5f)]
     [SerializeField] private float markerSpacing = 20f;
-
-    [Tooltip("Режим камеры для маркеров внутри станций")]
     [SerializeField] private MarkerCameraMode stationMarkerCameraMode = MarkerCameraMode.Both;
-
-    [Tooltip("Режим камеры для маркеров на перегонах (тоннель, депо)")]
     [SerializeField] private MarkerCameraMode tunnelMarkerCameraMode = MarkerCameraMode.Both;
 
     [Header("Debug")]
     [SerializeField] private bool logVerbose = true;
 
-    // ------------------ Публичный вложенный класс ------------------
+    // ---------------- Nested types ----------------
 
     [System.Serializable]
     public class LinePrefabOverride
     {
-        [Tooltip("ID линии из metro_map.json (например: red, green, purple, black)")]
         public string lineId;
-
-        [Header("Префабы (пусто = взять из JSON)")]
         public GameObject stationPrefab;
         public GameObject transferStationPrefab;
         public GameObject depotPrefab;
         public GameObject tunnelSegmentPrefab;
-
-        [Header("Длины (0 = авто из меша, >0 = принудительно)")]
         public float stationLength = 0f;
         public float transferStationLength = 0f;
         public float depotLength = 0f;
         public float tunnelSegmentLength = 0f;
     }
-
-    // ------------------ Внутреннее состояние ------------------
-
-    private MetroMapData data;
-    private readonly Dictionary<string, Color> colorMap = new();
-    private readonly Dictionary<string, int> lineHeights = new();
-    private readonly Dictionary<GameObject, float> measuredLengths = new();
 
     private class LineContext
     {
@@ -74,7 +94,26 @@ public class MetroMapBuilder : MonoBehaviour
         public float tunnelSegmentLength;
     }
 
-    // ------------------ Lifecycle ------------------
+    private struct PathNode
+    {
+        public Vector3 center;
+        public Quaternion rotation;
+        public Vector3 travelForward;
+        public Vector3 railEntry;
+        public Vector3 railExit;
+        public Vector3 travelAtEntry;
+        public Vector3 travelAtExit;
+        public bool isStation;
+    }
+
+    // ---------------- State ----------------
+
+    private MetroMapData data;
+    private readonly Dictionary<string, Color> colorMap = new();
+    private readonly Dictionary<string, int> lineHeights = new();
+    private readonly Dictionary<GameObject, float> measuredLengths = new();
+
+    // ---------------- Lifecycle ----------------
 
     private void Start()
     {
@@ -94,6 +133,8 @@ public class MetroMapBuilder : MonoBehaviour
         if (logVerbose) Debug.Log($"[MetroMap] Built {data.lines.Length} lines.");
     }
 
+    // ---------------- Loading / parsing ----------------
+
     private void ClearExisting()
     {
         for (int i = transform.childCount - 1; i >= 0; i--)
@@ -107,11 +148,7 @@ public class MetroMapBuilder : MonoBehaviour
     private bool LoadData()
     {
         var ta = Resources.Load<TextAsset>(dataResourceName);
-        if (ta == null)
-        {
-            Debug.LogError($"[MetroMap] Resources/{dataResourceName}.json not found");
-            return false;
-        }
+        if (ta == null) { Debug.LogError($"[MetroMap] Resources/{dataResourceName}.json not found"); return false; }
         data = JsonUtility.FromJson<MetroMapData>(ta.text);
         return data != null && data.lines != null && data.lines.Length > 0;
     }
@@ -133,12 +170,11 @@ public class MetroMapBuilder : MonoBehaviour
             if (ov == null || string.IsNullOrEmpty(ov.lineId)) continue;
             bool found = false;
             foreach (var l in data.lines) if (l.id == ov.lineId) { found = true; break; }
-            if (!found)
-                Debug.LogWarning($"[MetroMap] LinePrefabOverride с lineId='{ov.lineId}' не найдена в JSON");
+            if (!found) Debug.LogWarning($"[MetroMap] LinePrefabOverride с lineId='{ov.lineId}' не найдена в JSON");
         }
     }
 
-    // ------------------ Высоты ------------------
+    // ---------------- Heights ----------------
 
     private void AssignHeights()
     {
@@ -146,12 +182,10 @@ public class MetroMapBuilder : MonoBehaviour
         var heights = new int[n];
         for (int i = 0; i < n; i++) heights[i] = -1;
 
-        // 1. Применяем то, что задано явно в конфиге
         for (int i = 0; i < n; i++)
             if (data.lines[i].heightLayer >= 0)
                 heights[i] = data.lines[i].heightLayer;
 
-        // 2. Строим граф пересечений/пересадок
         var adj = new List<int>[n];
         var transfers = new List<int>[n];
         for (int i = 0; i < n; i++) { adj[i] = new List<int>(); transfers[i] = new List<int>(); }
@@ -168,11 +202,9 @@ public class MetroMapBuilder : MonoBehaviour
             }
         }
 
-        // 3. Авторасчёт ТОЛЬКО для незаданных
         for (int start = 0; start < n; start++)
         {
             if (heights[start] >= 0) continue;
-
             int seedH = 0;
             foreach (int u in adj[start])
                 if (heights[u] >= 0) { seedH = heights[u] + 1; break; }
@@ -194,7 +226,6 @@ public class MetroMapBuilder : MonoBehaviour
             }
         }
 
-        // 4. Пересадочные пары — не на одной высоте (если хоть одну можно сдвинуть)
         for (int i = 0; i < n; i++)
         for (int j = i + 1; j < n; j++)
             if (transfers[i].Contains(j) && heights[i] == heights[j])
@@ -216,8 +247,7 @@ public class MetroMapBuilder : MonoBehaviour
         {
             var parts = new List<string>();
             for (int i = 0; i < n; i++)
-                parts.Add($"{data.lines[i].id}={heights[i]}" +
-                        (data.lines[i].heightLayer >= 0 ? "(cfg)" : "(auto)"));
+                parts.Add($"{data.lines[i].id}={heights[i]}" + (data.lines[i].heightLayer >= 0 ? "(cfg)" : "(auto)"));
             Debug.Log("[MetroMap] Heights: " + string.Join(", ", parts));
         }
     }
@@ -233,8 +263,7 @@ public class MetroMapBuilder : MonoBehaviour
         foreach (var sa in a.stations)
         {
             if (string.IsNullOrEmpty(sa.transferTo)) continue;
-            foreach (var sb in b.stations)
-                if (sa.transferTo == sb.id) return true;
+            foreach (var sb in b.stations) if (sa.transferTo == sb.id) return true;
         }
         return false;
     }
@@ -262,7 +291,7 @@ public class MetroMapBuilder : MonoBehaviour
         return t > 0.01f && t < 0.99f && u > 0.01f && u < 0.99f;
     }
 
-    // ------------------ Оверрайды и длины ------------------
+    // ---------------- Prefab resolution ----------------
 
     private LinePrefabOverride GetOverride(string lineId)
     {
@@ -354,29 +383,14 @@ public class MetroMapBuilder : MonoBehaviour
         return ctx;
     }
 
-    // ------------------ Линия ------------------
+    // ==========================================================
+    //  BUILD LINE
+    // ==========================================================
 
     private void BuildLine(LineData line)
     {
-        // ---- Пустышка под ветку ----
         var lineRoot = new GameObject($"Line_{line.id}");
         lineRoot.transform.SetParent(transform, false);
-
-        // ---- Пустышка под маркеры ----
-        Transform markersRoot = null;
-        if (generateMarkers)
-        {
-            if (markerPrefab != null)
-            {
-                var mg = new GameObject("Markers");
-                mg.transform.SetParent(lineRoot.transform, false);
-                markersRoot = mg.transform;
-            }
-            else
-            {
-                Debug.LogWarning($"[MetroMap] generateMarkers = true, но markerPrefab не задан (line={line.id})", this);
-            }
-        }
 
         var ctx = MakeContext(line);
         float y = lineHeights[line.id] * data.settings.heightStep;
@@ -392,167 +406,311 @@ public class MetroMapBuilder : MonoBehaviour
                 -st.pos[1] * data.settings.schematicScale);
         }
 
-        var orientations = new Quaternion[n];
+        var travelDirs = new Vector3[n];
         for (int i = 0; i < n; i++)
         {
             Vector3 dir;
-            if (i == 0 && n > 1)          dir = (centers[1] - centers[0]).normalized;
-            else if (i == n - 1 && n > 1) dir = (centers[i] - centers[i-1]).normalized;
-            else if (n > 2)
+            if (n == 1) dir = Vector3.forward;
+            else if (i == 0) dir = (centers[1] - centers[0]).normalized;
+            else if (i == n - 1) dir = (centers[i] - centers[i-1]).normalized;
+            else
             {
                 Vector3 inc  = (centers[i] - centers[i-1]).normalized;
                 Vector3 outg = (centers[i+1] - centers[i]).normalized;
                 dir = (inc + outg).normalized;
             }
-            else dir = Vector3.forward;
-            if (dir.sqrMagnitude < 0.01f) dir = Vector3.forward;
-            orientations[i] = Quaternion.LookRotation(dir, Vector3.up);
+            if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
+            travelDirs[i] = dir;
         }
 
-        Vector3 outStart = n > 1 ? (centers[0] - centers[1]).normalized : Vector3.forward;
-        Vector3 depotStartPos = centers[0] + outStart * data.settings.depotOffset;
-        Quaternion depotStartRot = Quaternion.LookRotation(-outStart, Vector3.up);
+        Vector3 depotStartForward = n > 0 ? travelDirs[0] : Vector3.forward;
+        Vector3 depotStartCenter  = centers[0] - depotStartForward * data.settings.depotOffset;
 
-        Vector3 outEnd = n > 1 ? (centers[n-1] - centers[n-2]).normalized : Vector3.forward;
-        Vector3 depotEndPos = centers[n-1] + outEnd * data.settings.depotOffset;
-        Quaternion depotEndRot = Quaternion.LookRotation(-outEnd, Vector3.up);
+        Vector3 depotEndForward = n > 0 ? travelDirs[n-1] : Vector3.forward;
+        Vector3 depotEndCenter  = centers[n-1] + depotEndForward * data.settings.depotOffset;
 
-        // Сборка единого «пути»: депо + станции + депо
-        var pathPoints      = new List<Vector3>();
-        var pathHalfLengths = new List<float>();
-        var pathRenderers   = new List<GameObject>();
+        var nodes = new List<PathNode>(n + 2);
 
-        pathPoints.Add(depotStartPos);
-        pathHalfLengths.Add(ctx.depotLength * 0.5f);
-        pathRenderers.Add(ResolvePrefab(ctx.ov, "depot"));
+        // --- DepotStart ---
+        {
+            var prefab = ResolvePrefab(ctx.ov, "depot");
+            float len = ctx.depotLength;
+            float halfLen = len * 0.5f;
+            var rot = Quaternion.LookRotation(depotStartForward, Vector3.up);
 
+            var node = new PathNode
+            {
+                center = depotStartCenter,
+                rotation = rot,
+                travelForward = depotStartForward,
+                travelAtEntry = depotStartForward,
+                travelAtExit = depotStartForward,
+                isStation = false,
+                railEntry = depotStartCenter - depotStartForward * halfLen
+            };
+
+            if (prefab != null && TryGetAnchorLocal(prefab, anchorExitName, out Vector3 ex))
+                node.railExit = depotStartCenter + rot * ex;
+            else
+                node.railExit = depotStartCenter + depotStartForward * halfLen;
+
+            SpawnOrFallback(prefab, depotStartCenter, rot, $"Depot_{line.id}_start", len, lineRoot.transform);
+            nodes.Add(node);
+        }
+
+        // --- Станции ---
         for (int i = 0; i < n; i++)
         {
             var st = line.stations[i];
             bool isTransfer = !string.IsNullOrEmpty(st.transferTo);
-            pathPoints.Add(centers[i]);
-            pathHalfLengths.Add((isTransfer ? ctx.transferStationLength : ctx.stationLength) * 0.5f);
-            pathRenderers.Add(ResolvePrefab(ctx.ov, isTransfer ? "transferStation" : "station"));
+            var prefab = ResolvePrefab(ctx.ov, isTransfer ? "transferStation" : "station");
+            float len = isTransfer ? ctx.transferStationLength : ctx.stationLength;
+            float halfLen = len * 0.5f;
+            var rot = Quaternion.LookRotation(travelDirs[i], Vector3.up);
+
+            var node = new PathNode
+            {
+                center = centers[i],
+                rotation = rot,
+                travelForward = travelDirs[i],
+                travelAtEntry = travelDirs[i],
+                travelAtExit = travelDirs[i],
+                isStation = true
+            };
+
+            if (prefab != null && TryGetAnchorLocal(prefab, anchorEntryName, out Vector3 en))
+                node.railEntry = centers[i] + rot * en;
+            else
+                node.railEntry = centers[i] - travelDirs[i] * halfLen;
+
+            if (prefab != null && TryGetAnchorLocal(prefab, anchorExitName, out Vector3 ex))
+                node.railExit = centers[i] + rot * ex;
+            else
+                node.railExit = centers[i] + travelDirs[i] * halfLen;
+
+            SpawnOrFallback(prefab, centers[i], rot, $"Station_{line.id}_{st.id}", len, lineRoot.transform);
+            nodes.Add(node);
         }
 
-        pathPoints.Add(depotEndPos);
-        pathHalfLengths.Add(ctx.depotLength * 0.5f);
-        pathRenderers.Add(ResolvePrefab(ctx.ov, "depot"));
-
-        // Спавн станций и депо (родитель — lineRoot)
-        for (int i = 0; i < n; i++)
-            PlaceStation(ctx, line.stations[i], centers[i], orientations[i], lineRoot.transform);
-
-        PlaceDepot(ctx, depotStartPos, depotStartRot, line, "start", lineRoot.transform);
-        PlaceDepot(ctx, depotEndPos,   depotEndRot,   line, "end",   lineRoot.transform);
-
-        // Тоннели (родитель — lineRoot)
-        for (int i = 0; i < pathPoints.Count - 1; i++)
+        // --- DepotEnd ---
         {
-            Vector3 p0 = pathPoints[Mathf.Max(0, i - 1)];
-            Vector3 p1 = pathPoints[i];
-            Vector3 p2 = pathPoints[i + 1];
-            Vector3 p3 = pathPoints[Mathf.Min(pathPoints.Count - 1, i + 2)];
+            var prefab = ResolvePrefab(ctx.ov, "depot");
+            float len = ctx.depotLength;
+            float halfLen = len * 0.5f;
+            var rot = Quaternion.LookRotation(depotEndForward, Vector3.up);
 
-            BuildTunnel(ctx, p0, p1, p2, p3, pathHalfLengths[i], pathHalfLengths[i + 1], lineRoot.transform);
+            var node = new PathNode
+            {
+                center = depotEndCenter,
+                rotation = rot,
+                travelForward = depotEndForward,
+                travelAtEntry = depotEndForward,
+                travelAtExit = depotEndForward,
+                isStation = false,
+                railExit = depotEndCenter + depotEndForward * halfLen
+            };
+
+            if (prefab != null && TryGetAnchorLocal(prefab, anchorEntryName, out Vector3 en))
+                node.railEntry = depotEndCenter + rot * en;
+            else
+                node.railEntry = depotEndCenter - depotEndForward * halfLen;
+
+            SpawnOrFallback(prefab, depotEndCenter, rot, $"Depot_{line.id}_end", len, lineRoot.transform);
+            nodes.Add(node);
         }
 
-        // Маркеры пути
-        if (markersRoot != null)
-            BuildMarkersForLine(ctx, line, pathPoints, markersRoot);
+        // Тоннели + осевая линия для маркеров
+        var fullCenterline = new List<Vector3>();
+        var fullIsStation  = new List<bool>();
+
+        for (int i = 0; i < nodes.Count - 1; i++)
+        {
+            BuildTunnelBetween(nodes[i], nodes[i+1], ctx, lineRoot.transform, fullCenterline, fullIsStation);
+
+            if (nodes[i+1].isStation)
+            {
+                if (fullCenterline.Count > 0 &&
+                    Vector3.Distance(fullCenterline[fullCenterline.Count - 1], nodes[i+1].railEntry) < 0.001f)
+                    fullIsStation[fullCenterline.Count - 1] = true;
+
+                Vector3 e = nodes[i+1].railEntry;
+                Vector3 x = nodes[i+1].railExit;
+                const int straightSamples = 8;
+                for (int k = 1; k <= straightSamples; k++)
+                {
+                    float s = (float)k / straightSamples;
+                    Vector3 pt = Vector3.Lerp(e, x, s);
+                    if (fullCenterline.Count > 0 &&
+                        Vector3.Distance(fullCenterline[fullCenterline.Count - 1], pt) < 0.001f) continue;
+                    fullCenterline.Add(pt);
+                    fullIsStation.Add(true);
+                }
+            }
+        }
+
+        // Маркеры — логика НЕ ТРОНУТА
+        if (generateMarkers && markerPrefab != null)
+        {
+            var markersRoot = new GameObject("Markers");
+            markersRoot.transform.SetParent(lineRoot.transform, false);
+            BuildMarkersAlong(fullCenterline, fullIsStation, markersRoot.transform);
+        }
+        else if (generateMarkers && markerPrefab == null)
+        {
+            Debug.LogWarning($"[MetroMap] generateMarkers = true, но markerPrefab не задан (line={line.id})", this);
+        }
     }
 
-    private void BuildTunnel(LineContext ctx,
-                            Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3,
-                            float trimStart, float trimEnd, Transform parent)
+    // ==========================================================
+    //  TUNNEL BUILDING
+    // ==========================================================
+
+    private void BuildTunnelBetween(
+        PathNode from, PathNode to, LineContext ctx, Transform parent,
+        List<Vector3> fullCenterline, List<bool> fullIsStation)
     {
-        int subdiv = Mathf.Max(8, data.settings.smoothingSubdivisions * 2);
-        var raw = new List<Vector3>();
-        for (int s = 0; s <= subdiv; s++) raw.Add(CatmullRom(p0, p1, p2, p3, (float)s / subdiv));
+        Vector3 p0 = from.railExit;
+        Vector3 p1 = to.railEntry;
+        Vector3 t0 = from.travelAtExit;
+        Vector3 t1 = to.travelAtEntry;
 
-        var trimmed = TrimPathEnds(raw, trimStart, trimEnd);
-        if (trimmed.Count < 2) return;
+        float dist = Vector3.Distance(p0, p1);
+        if (dist < minTunnelLength) return;
 
-        // ВАЖНО: сначала оффсет по trimmed, а потом ресемпл —
-        // тогда последний сегмент оффсета точно совпадает с краем станции/депо.
-        for (int side = 0; side < 2; side++)
+        // --- Осевая кривая Hermite ---
+        float tangentScale = dist * tangentStrength;
+        Vector3 m0 = t0.normalized * tangentScale;
+        Vector3 m1 = t1.normalized * tangentScale;
+
+        var centerline = new List<Vector3>(tunnelSamples + 1);
+        for (int k = 0; k <= tunnelSamples; k++)
         {
-            float sign = side == 0 ? -1f : 1f;
-            var offsetPath = OffsetPath(trimmed, data.settings.trackSpacing * 0.5f * sign);
-            var resampled  = ResamplePath(offsetPath, ctx.tunnelSegmentLength);
-            if (resampled.Count < 2) continue;
+            float s = (float)k / tunnelSamples;
+            centerline.Add(HermitePoint(p0, m0, p1, m1, s));
+        }
 
-            for (int k = 0; k < resampled.Count - 1; k++)
+        // --- Копим осевую для маркеров (ЛОГИКА НЕ ТРОНУТА) ---
+        for (int k = 0; k < centerline.Count; k++)
+        {
+            if (fullCenterline.Count > 0 &&
+                Vector3.Distance(fullCenterline[fullCenterline.Count - 1], centerline[k]) < 0.001f)
+                continue;
+            fullCenterline.Add(centerline[k]);
+            fullIsStation.Add(false);
+        }
+
+        // --- Спавн тоннелей по выбранному режиму ---
+        switch (tunnelMode)
+        {
+            case TunnelMode.SingleCenterline:
+                SpawnTunnelAlong(centerline, ctx, parent);
+                break;
+
+            case TunnelMode.TwoTunnels:
             {
-                Vector3 a = resampled[k];
-                Vector3 b = resampled[k + 1];
-                Vector3 d = b - a;
-                float len = d.magnitude;
-                if (len < 0.0001f) continue;
+                // Тоннель 1 — точно по осевой (там же, где маркеры)
+                SpawnTunnelAlong(centerline, ctx, parent);
 
-                Vector3 mid = (a + b) * 0.5f;
-                SpawnTunnel(ctx, mid, Quaternion.LookRotation(d / len, Vector3.up), len, parent);
+                // Тоннель 2 — смещён на trackSpacing вправо от направления движения
+                if (Mathf.Abs(trackSpacing) > 0.0001f)
+                {
+                    var offsetPath = OffsetCenterline(centerline, trackSpacing);
+
+                    // Жёсткая привязка краёв к торцу станции
+                    if (offsetPath.Count >= 2)
+                    {
+                        Vector3 rightStart = Vector3.Cross(Vector3.up, t0).normalized;
+                        Vector3 rightEnd   = Vector3.Cross(Vector3.up, t1).normalized;
+                        offsetPath[0] = p0 + rightStart * trackSpacing;
+                        offsetPath[offsetPath.Count - 1] = p1 + rightEnd * trackSpacing;
+                    }
+
+                    SpawnTunnelAlong(offsetPath, ctx, parent);
+                }
+                break;
+            }
+
+            case TunnelMode.TwoRails:
+            {
+                // Старое симметричное поведение: ±trackSpacing/2
+                for (int side = 0; side < 2; side++)
+                {
+                    float sign = side == 0 ? 1f : -1f;
+                    var railPath = OffsetCenterline(centerline, sign * trackSpacing * 0.5f);
+
+                    if (railPath.Count >= 2)
+                    {
+                        Vector3 rightStart = Vector3.Cross(Vector3.up, t0).normalized;
+                        Vector3 rightEnd   = Vector3.Cross(Vector3.up, t1).normalized;
+                        railPath[0] = p0 + rightStart * (sign * trackSpacing * 0.5f);
+                        railPath[railPath.Count - 1] = p1 + rightEnd * (sign * trackSpacing * 0.5f);
+                    }
+
+                    SpawnTunnelAlong(railPath, ctx, parent);
+                }
+                break;
             }
         }
     }
 
-    private Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    /// <summary>Ресемплит путь на равные сегменты и спавнит их как сегменты тоннеля.</summary>
+    private void SpawnTunnelAlong(List<Vector3> path, LineContext ctx, Transform parent)
     {
-        float t2 = t * t, t3 = t2 * t;
-        return 0.5f * (
-            2f * p1 +
-            (-p0 + p2) * t +
-            (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
-            (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
-    }
-
-    private List<Vector3> TrimPathEnds(List<Vector3> path, float trimStart, float trimEnd)
-    {
-        if (path.Count < 2) return new List<Vector3>(path);
-        float total = 0;
-        for (int i = 1; i < path.Count; i++) total += Vector3.Distance(path[i - 1], path[i]);
-        if (total < 0.01f) return new List<Vector3> { path[0] };
-
-        float startDist = Mathf.Clamp(trimStart, 0f, total * 0.45f);
-        float endDist   = Mathf.Clamp(total - trimEnd, startDist + 0.01f, total);
-        if (endDist - startDist < 0.02f)
-            return new List<Vector3>(); // тоннеля быть не должно 
-
-        var result = new List<Vector3>();
-        float walked = 0;
-
-        for (int i = 0; i < path.Count - 1; i++)
+        var segs = ResampleToSegments(path, ctx.tunnelSegmentLength);
+        for (int k = 0; k < segs.Count - 1; k++)
         {
-            Vector3 a = path[i], b = path[i + 1];
-            float segLen = Vector3.Distance(a, b);
-            float segStart = walked, segEnd = walked + segLen;
-
-            if (segEnd <= startDist) { walked = segEnd; continue; }
-            if (segStart >= endDist) break;
-
-            Vector3 entry = segStart < startDist ? Vector3.Lerp(a, b, (startDist - segStart) / segLen) : a;
-            Vector3 exit  = segEnd   > endDist   ? Vector3.Lerp(a, b, (endDist   - segStart) / segLen) : b;
-
-            if (result.Count == 0 || Vector3.Distance(result[result.Count - 1], entry) > 0.001f)
-                result.Add(entry);
-            if (Vector3.Distance(entry, exit) > 0.001f)
-                result.Add(exit);
-
-            walked = segEnd;
+            Vector3 a = segs[k];
+            Vector3 b = segs[k + 1];
+            Vector3 d = b - a;
+            float len = d.magnitude;
+            if (len < 0.001f) continue;
+            SpawnTunnelSegment(ctx, a, b,
+                Quaternion.LookRotation(d / len, Vector3.up), len, parent);
         }
-
-        return result.Count >= 2 ? result : new List<Vector3> { path[path.Count / 2] };
     }
 
-    private List<Vector3> ResamplePath(List<Vector3> path, float targetLen)
+    private static Vector3 HermitePoint(Vector3 p0, Vector3 m0, Vector3 p1, Vector3 m1, float s)
+    {
+        float s2 = s * s, s3 = s2 * s;
+        float h00 =  2f * s3 - 3f * s2 + 1f;
+        float h10 =        s3 - 2f * s2 + s;
+        float h01 = -2f * s3 + 3f * s2;
+        float h11 =        s3 -      s2;
+        return h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1;
+    }
+
+    private List<Vector3> OffsetCenterline(List<Vector3> centerline, float offset)
+    {
+        var result = new List<Vector3>(centerline.Count);
+        for (int k = 0; k < centerline.Count; k++)
+        {
+            Vector3 tangent = TangentAt(centerline, k);
+            Vector3 right = Vector3.Cross(Vector3.up, tangent);
+            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
+            right.Normalize();
+            result.Add(centerline[k] + right * offset);
+        }
+        return result;
+    }
+
+    private static Vector3 TangentAt(List<Vector3> path, int k)
+    {
+        if (path.Count < 2) return Vector3.forward;
+        if (k == 0) return (path[1] - path[0]).normalized;
+        if (k == path.Count - 1) return (path[path.Count - 1] - path[path.Count - 2]).normalized;
+        return (path[k + 1] - path[k - 1]).normalized;
+    }
+
+    private List<Vector3> ResampleToSegments(List<Vector3> path, float targetLen)
     {
         if (targetLen < 0.01f) targetLen = 2f;
         if (path.Count < 2) return new List<Vector3>(path);
+
         float total = 0;
         for (int i = 1; i < path.Count; i++) total += Vector3.Distance(path[i - 1], path[i]);
         if (total < 0.01f) return new List<Vector3> { path[0] };
 
-        int numSeg = Mathf.Max(1, Mathf.CeilToInt(total / targetLen));
+        int numSeg = Mathf.Max(1, Mathf.RoundToInt(total / targetLen));
         float step = total / numSeg;
 
         var result = new List<Vector3> { path[0] };
@@ -565,88 +723,152 @@ public class MetroMapBuilder : MonoBehaviour
             while (segIdx < path.Count - 1)
             {
                 float d = Vector3.Distance(path[segIdx], path[segIdx + 1]);
-                if (walked + d >= target)
+                if (walked + d >= target - 0.0001f)
                 {
-                    float t = (target - walked) / d;
-                    result.Add(Vector3.Lerp(path[segIdx], path[segIdx + 1], t));
+                    float t = d > 0.0001f ? (target - walked) / d : 0f;
+                    result.Add(Vector3.Lerp(path[segIdx], path[segIdx + 1], Mathf.Clamp01(t)));
                     break;
                 }
                 walked += d;
                 segIdx++;
             }
         }
-        // Гарантия, что последняя точка path попадёт в результат —
-        // иначе последний сегмент не дотянется до края станции.
-        if (result.Count == 0 ||
-            Vector3.Distance(result[result.Count - 1], path[path.Count - 1]) > 0.001f)
-        {
-            result.Add(path[path.Count - 1]);
-        }
+
+        Vector3 last = path[path.Count - 1];
+        if (Vector3.Distance(result[result.Count - 1], last) > 0.001f) result.Add(last);
+
         return result;
     }
 
-    private List<Vector3> OffsetPath(List<Vector3> path, float offset)
-    {
-        var result = new List<Vector3>(path.Count);
-        for (int i = 0; i < path.Count; i++)
-        {
-            Vector3 prev = path[Mathf.Max(0, i - 1)];
-            Vector3 next = path[Mathf.Min(path.Count - 1, i + 1)];
-            Vector3 dir = next - prev;
-            if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
-            dir.Normalize();
-            Vector3 right = Vector3.Cross(Vector3.up, dir);
-            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
-            right.Normalize();
-            result.Add(path[i] + right * offset);
-        }
-        return result;
-    }
-
-    // ------------------ Спавн ------------------
-
-    private void PlaceStation(LineContext ctx, StationData st, Vector3 pos, Quaternion rot, Transform parent)
-    {
-        bool isTransfer = !string.IsNullOrEmpty(st.transferTo);
-        var prefab = ResolvePrefab(ctx.ov, isTransfer ? "transferStation" : "station");
-        float len = isTransfer ? ctx.transferStationLength : ctx.stationLength;
-        SpawnOrFallback(prefab, pos, rot, $"Station_{ctx.line.id}_{st.id}", len, parent);
-    }
-
-    private void PlaceDepot(LineContext ctx, Vector3 pos, Quaternion rot, LineData line, string suffix, Transform parent)
-    {
-        var prefab = ResolvePrefab(ctx.ov, "depot");
-        SpawnOrFallback(prefab, pos, rot, $"Depot_{line.id}_{suffix}", ctx.depotLength, parent);
-    }
-
-    private void SpawnTunnel(LineContext ctx, Vector3 pos, Quaternion rot, float targetLength, Transform parent)
+    private void SpawnTunnelSegment(LineContext ctx, Vector3 a, Vector3 b, Quaternion rot, float len, Transform parent)
     {
         var prefab = ResolvePrefab(ctx.ov, "tunnelSegment");
-        var go = SpawnOrFallback(prefab, pos, rot, $"Tunnel_{ctx.line.id}", ctx.tunnelSegmentLength * 0.5f, parent);
+
+        Vector3 spawnPos;
+        switch (tunnelPivot)
+        {
+            case TunnelPivot.Start: spawnPos = a; break;
+            case TunnelPivot.End:   spawnPos = b; break;
+            default:                spawnPos = (a + b) * 0.5f; break;
+        }
+
+        var go = SpawnOrFallback(prefab, spawnPos, rot, $"Tunnel_{ctx.line.id}", len, parent);
         if (go == null) return;
 
-        // Растягиваем по локальной Z так, чтобы сегмент точно занял отрезок [a..b].
-        // Это гарантирует, что последний сегмент дотянется до края станции/депо.
-        if (prefab != null && targetLength > 0.0001f)
+        if (prefab != null && len > 0.0001f)
         {
-            // ctx.tunnelSegmentLength измеряется у префаба с localScale = 1,
-            // а экземпляр наследует localScale префаба. Учитываем это:
             float prefabScaleZ = prefab.transform.localScale.z;
             float baseLen = ctx.tunnelSegmentLength * prefabScaleZ;
-
             if (baseLen > 0.0001f)
             {
-                var s = go.transform.localScale;
-                s.z *= targetLength / baseLen;
-                go.transform.localScale = s;
+                var sc = go.transform.localScale;
+                sc.z *= len / baseLen;
+                go.transform.localScale = sc;
             }
         }
-        // Для fallback (когда префаба нет) масштабирование не нужно.
 
         var rend = go.GetComponentInChildren<Renderer>();
         if (rend != null && colorMap.TryGetValue(ctx.line.colorKey, out var col))
             rend.material.color = col;
     }
+
+    // ==========================================================
+    //  ANCHORS
+    // ==========================================================
+
+    private bool TryGetAnchorLocal(GameObject prefab, string anchorName, out Vector3 localPos)
+    {
+        localPos = Vector3.zero;
+        if (prefab == null || string.IsNullOrEmpty(anchorName)) return false;
+        var t = prefab.transform.Find(anchorName);
+        if (t == null) return false;
+        localPos = t.localPosition;
+        return true;
+    }
+
+    // ==========================================================
+    //  MARKERS (ЛОГИКА НЕ ТРОНУТА)
+    // ==========================================================
+
+    private void BuildMarkersAlong(List<Vector3> path, List<bool> isStation, Transform parent)
+    {
+        if (path.Count < 2) return;
+
+        var cum = new float[path.Count];
+        for (int i = 1; i < path.Count; i++)
+            cum[i] = cum[i - 1] + Vector3.Distance(path[i - 1], path[i]);
+        float total = cum[cum.Length - 1];
+        if (total < 0.1f) return;
+
+        float spacing = Mathf.Max(0.5f, markerSpacing);
+        var arcs = new List<float> { 0f };
+        int steps = Mathf.FloorToInt(total / spacing);
+        for (int i = 1; i <= steps; i++) arcs.Add(i * spacing);
+        if (total - arcs[arcs.Count - 1] > 0.5f) arcs.Add(total);
+
+        var markers = new List<TrainTrackMarker>(arcs.Count);
+        for (int i = 0; i < arcs.Count; i++)
+        {
+            Vector3 pos = SampleByArc(path, cum, arcs[i], out Vector3 fwd);
+            if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
+            Quaternion rot = Quaternion.LookRotation(fwd, Vector3.up);
+
+            int idx = FindClosestIndex(cum, arcs[i]);
+            bool inStation = isStation[Mathf.Clamp(idx, 0, isStation.Count - 1)];
+
+            var go = Instantiate(markerPrefab, pos, rot, parent);
+            go.name = $"Marker_{i:D3}";
+
+            var m = go.GetComponent<TrainTrackMarker>();
+            if (m == null) m = go.AddComponent<TrainTrackMarker>();
+            m.cameraMode  = inStation ? stationMarkerCameraMode : tunnelMarkerCameraMode;
+            m.isSwitchPoint = false;
+            markers.Add(m);
+        }
+
+        for (int i = 0; i < markers.Count; i++)
+        {
+            if (i < markers.Count - 1) markers[i].nextForward  = markers[i + 1];
+            if (i > 0)                 markers[i].nextBackward = markers[i - 1];
+        }
+
+        if (logVerbose) Debug.Log($"[MetroMap] {markers.Count} markers generated");
+    }
+
+    private int FindClosestIndex(float[] cum, float arc)
+    {
+        int lo = 0, hi = cum.Length - 1;
+        while (lo < hi - 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (cum[mid] <= arc) lo = mid; else hi = mid;
+        }
+        return Mathf.Abs(cum[lo] - arc) < Mathf.Abs(cum[hi] - arc) ? lo : hi;
+    }
+
+    private Vector3 SampleByArc(List<Vector3> path, float[] cum, float arc, out Vector3 forward)
+    {
+        int last = cum.Length - 1;
+        if (arc <= 0f) { forward = (path[1] - path[0]).normalized; return path[0]; }
+        if (arc >= cum[last]) { forward = (path[last] - path[last - 1]).normalized; return path[last]; }
+
+        int lo = 0, hi = last;
+        while (lo < hi - 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (cum[mid] <= arc) lo = mid; else hi = mid;
+        }
+
+        float segLen = cum[hi] - cum[lo];
+        float t = segLen > 0.0001f ? (arc - cum[lo]) / segLen : 0f;
+        Vector3 dir = path[hi] - path[lo];
+        forward = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward;
+        return Vector3.Lerp(path[lo], path[hi], t);
+    }
+
+    // ==========================================================
+    //  SPAWN HELPER
+    // ==========================================================
 
     private GameObject SpawnOrFallback(GameObject prefab, Vector3 pos, Quaternion rot, string name, float fallbackSize, Transform parent)
     {
@@ -669,140 +891,9 @@ public class MetroMapBuilder : MonoBehaviour
         return go;
     }
 
-    // ------------------ Маркеры пути ------------------
-
-    /// <summary>
-    /// Генерирует маркеры вдоль осевой линии ветки (Catmull-Rom через депо/станции).
-    /// Внутри интервалов станций ставит маркеры с stationMarkerCameraMode,
-    /// на перегонах — с tunnelMarkerCameraMode. Связывает цепочку nextForward/nextBackward.
-    /// </summary>
-    private void BuildMarkersForLine(LineContext ctx, LineData line, List<Vector3> pathPoints, Transform markersParent)
-    {
-        int n = line.stations.Length;
-        if (pathPoints.Count < 2 || n == 0) return;
-
-        float spacing = Mathf.Max(0.5f, markerSpacing);
-        int subdiv    = Mathf.Max(8, data.settings.smoothingSubdivisions * 2);
-
-        // ---- 1. Строим гладкую осевую линию (без тримминга) ----
-        var smooth = new List<Vector3>();
-        for (int i = 0; i < pathPoints.Count - 1; i++)
-        {
-            Vector3 p0 = pathPoints[Mathf.Max(0, i - 1)];
-            Vector3 p1 = pathPoints[i];
-            Vector3 p2 = pathPoints[i + 1];
-            Vector3 p3 = pathPoints[Mathf.Min(pathPoints.Count - 1, i + 2)];
-
-            int startS = (i == 0) ? 0 : 1; // не дублируем стык
-            for (int s = startS; s <= subdiv; s++)
-                smooth.Add(CatmullRom(p0, p1, p2, p3, (float)s / subdiv));
-        }
-        if (smooth.Count < 2) return;
-
-        // ---- 2. Накопительная длина дуги ----
-        var cum = new float[smooth.Count];
-        for (int i = 1; i < smooth.Count; i++)
-            cum[i] = cum[i - 1] + Vector3.Distance(smooth[i - 1], smooth[i]);
-        float totalArc = cum[cum.Length - 1];
-        if (totalArc < 0.1f) return;
-
-        // ---- 3. Интервалы станций в дуговой длине ----
-        // pathPoints[i+1] (центр станции i) лежит в smooth по индексу (i+1)*subdiv
-        var stationArc  = new float[n];
-        var stationHalf = new float[n];
-        for (int i = 0; i < n; i++)
-        {
-            stationArc[i]  = cum[(i + 1) * subdiv];
-            var st = line.stations[i];
-            bool isTransfer = !string.IsNullOrEmpty(st.transferTo);
-            stationHalf[i] = (isTransfer ? ctx.transferStationLength : ctx.stationLength) * 0.5f;
-        }
-
-        // ---- 4. Собираем дуговые позиции маркеров ----
-        var arcs = new List<float>();
-        arcs.Add(0f);
-        int steps = Mathf.FloorToInt(totalArc / spacing);
-        for (int i = 1; i <= steps; i++) arcs.Add(i * spacing);
-        arcs.Add(totalArc);
-
-        for (int i = 0; i < n; i++)
-        {
-            float a0 = stationArc[i] - stationHalf[i];
-            float a1 = stationArc[i] + stationHalf[i];
-            if (a0 > 0.5f)             arcs.Add(a0);
-            if (a1 < totalArc - 0.5f)  arcs.Add(a1);
-        }
-
-        arcs.Sort();
-        var filtered = new List<float>(arcs.Count);
-        foreach (var a in arcs)
-        {
-            if (filtered.Count == 0 || a - filtered[filtered.Count - 1] > 0.5f)
-                filtered.Add(a);
-        }
-
-        // ---- 5. Спавн маркеров + связка ----
-        var markers = new List<TrainTrackMarker>(filtered.Count);
-        for (int i = 0; i < filtered.Count; i++)
-        {
-            float arc = filtered[i];
-            Vector3 pos = SamplePathByArc(smooth, cum, arc, out Vector3 fwd);
-            if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
-            Quaternion rot = Quaternion.LookRotation(fwd, Vector3.up);
-
-            bool inStation = false;
-            for (int k = 0; k < n; k++)
-            {
-                if (Mathf.Abs(arc - stationArc[k]) <= stationHalf[k] + 0.01f)
-                { inStation = true; break; }
-            }
-
-            var go = Instantiate(markerPrefab, pos, rot, markersParent);
-            go.name = $"Marker_{i:D3}";
-
-            var marker = go.GetComponent<TrainTrackMarker>();
-            if (marker == null)
-            {
-                Debug.LogWarning("[MetroMap] В префабе маркера нет TrainTrackMarker. Добавляю автоматически.", this);
-                marker = go.AddComponent<TrainTrackMarker>();
-            }
-
-            marker.cameraMode  = inStation ? stationMarkerCameraMode : tunnelMarkerCameraMode;
-            marker.isSwitchPoint = false;
-            markers.Add(marker);
-        }
-
-        for (int i = 0; i < markers.Count; i++)
-        {
-            if (i < markers.Count - 1) markers[i].nextForward  = markers[i + 1];
-            if (i > 0)                 markers[i].nextBackward = markers[i - 1];
-        }
-
-        if (logVerbose)
-            Debug.Log($"[MetroMap] Line '{line.id}': {markers.Count} markers generated");
-    }
-
-    private Vector3 SamplePathByArc(List<Vector3> path, float[] cum, float arc, out Vector3 forward)
-    {
-        int last = cum.Length - 1;
-        if (arc <= 0f)            { forward = (path[1] - path[0]).normalized;          return path[0]; }
-        if (arc >= cum[last])     { forward = (path[last] - path[last - 1]).normalized; return path[last]; }
-
-        int lo = 0, hi = last;
-        while (lo < hi - 1)
-        {
-            int mid = (lo + hi) / 2;
-            if (cum[mid] <= arc) lo = mid; else hi = mid;
-        }
-
-        float segLen = cum[hi] - cum[lo];
-        float t = segLen > 0.0001f ? (arc - cum[lo]) / segLen : 0f;
-        Vector3 dir = path[hi] - path[lo];
-        forward = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward;
-        return Vector3.Lerp(path[lo], path[hi], t);
-    }
-
-    // ------------------ Editor utils ------------------
+    // ==========================================================
+    //  EDITOR UTILS
+    // ==========================================================
 
 #if UNITY_EDITOR
     [ContextMenu("Populate Line Overrides From JSON")]

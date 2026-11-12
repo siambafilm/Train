@@ -5,7 +5,7 @@
   "trackSpacing": 10.0,
   "tunnelSegmentLength": 35.0,
   "smoothingSubdivisions": 10,
-  "depotOffset": 200.0,
+  "depotOffset": 1000.0,
   "stationLength": 210,
   "depotLength": 1000,
   "fallbackSphereSize": 5.0
