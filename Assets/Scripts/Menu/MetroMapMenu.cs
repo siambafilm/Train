@@ -87,6 +87,14 @@ public class MetroMapMenu : MonoBehaviour
     [Tooltip("Необязательно: свой AudioSource (например, с AudioMixer-группой). Если пусто — будет создан автоматически.")]
     [SerializeField] private AudioSource sfxSource;
 
+    [Header("Music Fade")]
+    [Tooltip("Фоновый AudioSource с музыкой меню. Если пусто — скрипт попытается найти зацикленный AudioSource в сцене.")]
+    [SerializeField] private AudioSource musicSource;
+    [Tooltip("Длительность затухания музыки при переходе в игру (сек).")]
+    [SerializeField] private float musicFadeDuration = 1.4f;
+    [Tooltip("До какой громкости гасить (0 = полностью).")]
+    [SerializeField, Range(0f, 1f)] private float musicFadeTargetVolume = 0f;
+
     [Header("Loading")]
     [SerializeField] private int   spinnerBallCount = 8;
     [SerializeField] private float spinnerRadius    = 55f;
@@ -139,6 +147,7 @@ public class MetroMapMenu : MonoBehaviour
     private float hoverTime = 0f;
 
     private float lastHoverSoundTime = -999f;
+    private bool musicFadeStarted = false;
 
     private Sprite circleSprite;
     private Sprite ringSprite;
@@ -231,6 +240,63 @@ public class MetroMapMenu : MonoBehaviour
     {
         if (selectSound == null || sfxSource == null) return;
         sfxSource.PlayOneShot(selectSound, selectVolume);
+    }
+
+    // =====================================================================
+    //  Music fade
+    // =====================================================================
+    private AudioSource ResolveMusicSource()
+    {
+        if (musicSource != null) return musicSource;
+
+        // Автофолбэк: ищем зацикленный AudioSource (SFX не зациклен — не тронем).
+        var all = FindObjectsOfType<AudioSource>();
+        foreach (var a in all)
+        {
+            if (a == sfxSource) continue;
+            if (a != null && a.loop && a.isPlaying) return a;
+        }
+        return null;
+    }
+
+    private void StartMusicFade()
+    {
+        if (musicFadeStarted) return;
+        musicFadeStarted = true;
+
+        var src = ResolveMusicSource();
+        if (src == null) return;
+
+        StartCoroutine(FadeMusicRoutine(src));
+    }
+
+    private IEnumerator FadeMusicRoutine(AudioSource src)
+    {
+        if (src == null) yield break;
+
+        float startVol = src.volume;
+        float target   = Mathf.Clamp01(musicFadeTargetVolume);
+        float dur      = Mathf.Max(0.01f, musicFadeDuration);
+
+        // Если музыка уже тише целевой — просто доиграем без дерганья.
+        if (startVol <= target) yield break;
+
+        float t = 0f;
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / dur);
+            // Плавная кривая — без «обрыва» в конце
+            float smooth = k * k * (3f - 2f * k);
+            if (src != null) src.volume = Mathf.Lerp(startVol, target, smooth);
+            yield return null;
+        }
+
+        if (src != null)
+        {
+            src.volume = target;
+            if (target <= 0.001f) src.Stop();
+        }
     }
 
     private void LoadData()
@@ -1179,6 +1245,7 @@ public class MetroMapMenu : MonoBehaviour
         transitioning = true;
 
         PlaySelectSound();
+        StartMusicFade();
 
         MetroSession.SelectedLineId        = lv.data.id;
         MetroSession.SelectedLineName      = lv.data.name;
