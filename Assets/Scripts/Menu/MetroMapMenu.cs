@@ -10,6 +10,28 @@ public static class MetroSession
     public static string SelectedLineId;
     public static string SelectedLineName;
     public static string SelectedLineColorKey;
+    public static string SelectedLineColorHex;
+    public static Color  SelectedLineColor;
+
+    // Полезно вызвать на принимающей сцене: восстановит значения из PlayerPrefs,
+    // если статика ещё не была заполнена (например, если игра запущена сразу с GameScene).
+    public static void EnsureLoaded()
+    {
+        if (string.IsNullOrEmpty(SelectedLineId))
+            SelectedLineId = PlayerPrefs.GetString("Metro.SelectedLineId", "");
+        if (string.IsNullOrEmpty(SelectedLineName))
+            SelectedLineName = PlayerPrefs.GetString("Metro.SelectedLineName", "");
+        if (string.IsNullOrEmpty(SelectedLineColorKey))
+            SelectedLineColorKey = PlayerPrefs.GetString("Metro.SelectedLineColor", "");
+        if (string.IsNullOrEmpty(SelectedLineColorHex))
+            SelectedLineColorHex = PlayerPrefs.GetString("Metro.SelectedLineColorHex", "");
+
+        if (!string.IsNullOrEmpty(SelectedLineColorHex)
+            && ColorUtility.TryParseHtmlString(SelectedLineColorHex, out var c))
+        {
+            SelectedLineColor = c;
+        }
+    }
 }
 
 public class MetroMapMenu : MonoBehaviour
@@ -42,6 +64,12 @@ public class MetroMapMenu : MonoBehaviour
     [SerializeField] private float pulseSpeed = 3.5f;
     [SerializeField] private float pulseAmount = 0.12f;
 
+    [Header("Loading")]
+    [SerializeField] private int   spinnerBallCount = 8;
+    [SerializeField] private float spinnerRadius    = 55f;
+    [SerializeField] private float spinnerBallSize  = 20f;
+    [SerializeField] private float spinnerSpeed     = 1.8f;
+
     private MetroMapData data;
     private Canvas canvas;
     private CanvasGroup mapGroup;
@@ -53,6 +81,12 @@ public class MetroMapMenu : MonoBehaviour
     private Text subtitleText;
     private Text hintText;
     private Image fadeOverlay;
+
+    // --- Loading UI ---
+    private CanvasGroup loadingGroup;
+    private RectTransform spinnerRoot;
+    private readonly List<Image> spinnerBalls = new List<Image>();
+    private Text loadingText;
 
     private readonly List<LineVisual> lines = new List<LineVisual>();
     private LineVisual hovered;
@@ -104,6 +138,9 @@ public class MetroMapMenu : MonoBehaviour
 
     private void Update()
     {
+        // Спиннер крутится даже во время transitioning
+        UpdateSpinner();
+
         if (transitioning) return;
         hoverTime += Time.deltaTime;
         HandleHoverAndClick();
@@ -248,10 +285,83 @@ public class MetroMapMenu : MonoBehaviour
         linesRoot    = RT(NewUI("LinesRoot", mapRoot));    Stretch(linesRoot.gameObject);
         stationsRoot = RT(NewUI("StationsRoot", mapRoot)); Stretch(stationsRoot.gameObject);
 
+        // Затемнение (сначала)...
         var fade = NewUI("Fade", canvasRT); Stretch(fade);
         fadeOverlay = fade.AddComponent<Image>();
         fadeOverlay.color = new Color(0, 0, 0, 0);
         fadeOverlay.raycastTarget = false;
+
+        // ...затем экран загрузки — он должен быть ПОВЕРХ затемнения.
+        BuildLoadingUI(canvasRT);
+    }
+
+    // =====================================================================
+    //  Loading screen
+    // =====================================================================
+    private void BuildLoadingUI(RectTransform canvasRT)
+    {
+        var loadingContainer = NewUI("Loading", canvasRT);
+        Stretch(loadingContainer);
+        loadingGroup = loadingContainer.AddComponent<CanvasGroup>();
+        loadingGroup.alpha = 0f;
+        loadingGroup.blocksRaycasts = false;
+        loadingGroup.interactable = false;
+
+        // Контейнер спиннера
+        spinnerRoot = RT(NewUI("Spinner", loadingContainer));
+        spinnerRoot.anchorMin = spinnerRoot.anchorMax = new Vector2(0.5f, 0.5f);
+        spinnerRoot.pivot = new Vector2(0.5f, 0.5f);
+        spinnerRoot.sizeDelta = new Vector2(160f, 160f);
+        spinnerRoot.anchoredPosition = new Vector2(0, 40f);
+
+        // Крутящиеся «шарики»
+        for (int i = 0; i < spinnerBallCount; i++)
+        {
+            float ang = (i / (float)spinnerBallCount) * Mathf.PI * 2f;
+
+            var ballGO = NewUI("ball_" + i, spinnerRoot);
+            var brt = RT(ballGO);
+            brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 0.5f);
+            brt.pivot = new Vector2(0.5f, 0.5f);
+            brt.sizeDelta = new Vector2(spinnerBallSize, spinnerBallSize);
+            brt.anchoredPosition = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * spinnerRadius;
+
+            var bimg = ballGO.AddComponent<Image>();
+            bimg.sprite = circleSprite;
+            bimg.color = new Color(1f, 1f, 1f, 0.15f);
+            bimg.raycastTarget = false;
+
+            spinnerBalls.Add(bimg);
+        }
+
+        // Надпись "ЗАГРУЗКА..."
+        loadingText = MakeText("LoadingText", RT(loadingContainer), "ЗАГРУЗКА...", 34,
+            FontStyle.Bold, new Color(0.93f, 0.95f, 1f), TextAnchor.MiddleCenter);
+
+        var ltr = loadingText.rectTransform;
+        ltr.anchorMin = ltr.anchorMax = new Vector2(0.5f, 0.5f);
+        ltr.pivot = new Vector2(0.5f, 0.5f);
+        ltr.sizeDelta = new Vector2(900f, 60f);
+        ltr.anchoredPosition = new Vector2(0, -100f);
+    }
+
+    private void UpdateSpinner()
+    {
+        if (loadingGroup == null || loadingGroup.alpha <= 0.001f) return;
+
+        float time = Time.unscaledTime; // не зависит от Time.timeScale
+        int n = spinnerBalls.Count;
+        if (n == 0) return;
+
+        for (int i = 0; i < n; i++)
+        {
+            float phase = (float)i / n;
+            float v = Mathf.Repeat(time * spinnerSpeed - phase, 1f);
+            float a = Mathf.Lerp(0.15f, 1f, Mathf.Pow(1f - v, 2.5f));
+            var c = spinnerBalls[i].color;
+            c.a = a;
+            spinnerBalls[i].color = c;
+        }
     }
 
     // =====================================================================
@@ -589,11 +699,17 @@ public class MetroMapMenu : MonoBehaviour
         if (transitioning) return;
         transitioning = true;
 
-        MetroSession.SelectedLineId = lv.data.id;
-        MetroSession.SelectedLineName = lv.data.name;
-        MetroSession.SelectedLineColorKey = lv.data.colorKey;
-        PlayerPrefs.SetString("Metro.SelectedLineId", lv.data.id);
-        PlayerPrefs.SetString("Metro.SelectedLineColor", lv.data.colorKey);
+        // ==== ПЕРЕДАЧА ДАННЫХ НА СЛЕДУЮЩУЮ СЦЕНУ ====
+        MetroSession.SelectedLineId        = lv.data.id;
+        MetroSession.SelectedLineName      = lv.data.name;
+        MetroSession.SelectedLineColorKey  = lv.data.colorKey;
+        MetroSession.SelectedLineColor     = lv.color;
+        MetroSession.SelectedLineColorHex  = "#" + ColorUtility.ToHtmlStringRGB(lv.color);
+
+        PlayerPrefs.SetString("Metro.SelectedLineId",       MetroSession.SelectedLineId);
+        PlayerPrefs.SetString("Metro.SelectedLineName",     MetroSession.SelectedLineName);
+        PlayerPrefs.SetString("Metro.SelectedLineColor",    MetroSession.SelectedLineColorKey);
+        PlayerPrefs.SetString("Metro.SelectedLineColorHex", MetroSession.SelectedLineColorHex);
         PlayerPrefs.Save();
 
         StartCoroutine(TransitionRoutine(lv));
@@ -603,9 +719,11 @@ public class MetroMapMenu : MonoBehaviour
     {
         hovered = null;
 
+        // Короткая пауза после клика — пусть игрок увидит "нажатие"
         float t = 0f;
         while (t < 0.35f) { t += Time.deltaTime; yield return null; }
 
+        // Затемнение + одновременное проявление экрана загрузки
         float dur = 0.7f;
         t = 0f;
         Vector3 startScale = mapRoot.localScale;
@@ -615,11 +733,22 @@ public class MetroMapMenu : MonoBehaviour
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / dur);
             k = 1f - Mathf.Pow(1f - k, 3f);
+
             mapRoot.localScale = Vector3.Lerp(startScale, endScale, k);
-            fadeOverlay.color = new Color(0, 0, 0, k);
-            titleGroup.alpha = 1f - k;
+            fadeOverlay.color  = new Color(0, 0, 0, k);
+            titleGroup.alpha   = 1f - k;
+            loadingGroup.alpha = k;
+
             yield return null;
         }
+        mapRoot.localScale = endScale;
+        fadeOverlay.color  = new Color(0, 0, 0, 1f);
+        loadingGroup.alpha = 1f;
+
+        // Даём спиннеру покрутиться ещё чуть-чуть — ощущение "идёт загрузка"
+        float extra = 0.7f;
+        t = 0f;
+        while (t < extra) { t += Time.deltaTime; yield return null; }
 
         if (!string.IsNullOrEmpty(gameSceneName))
             SceneManager.LoadScene(gameSceneName);
@@ -684,9 +813,9 @@ public class MetroMapMenu : MonoBehaviour
         go.transform.SetParent(parent, false);
         return go;
     }
+    private static GameObject NewUI(string name, GameObject parent) => NewUI(name, parent.transform);
     private static GameObject NewUI(string name, RectTransform parent) => NewUI(name, (Transform)parent);
 
-    // Мостик: GameObject → его RectTransform
     private static RectTransform RT(GameObject go) => (RectTransform)go.transform;
 
     private static void Stretch(GameObject go)
@@ -740,3 +869,50 @@ public class MetroMapMenu : MonoBehaviour
         return best;
     }
 }
+
+// =====================================================================
+// ПРИМЕР ПРИЁМА ЗНАЧЕНИЯ В ДРУГОЙ СЦЕНЕ (GameScene)
+// =====================================================================
+//
+// 1) Скопируйте класс ниже в отдельный файл  Assets/Scripts/Game/MetroLineReceiverExample.cs
+//    (имя файла должно совпадать с именем класса, чтобы его можно было повесить на GameObject).
+//
+// 2) Повесьте этот компонент на любой объект в сцене GameScene.
+//
+// 3) В Start() (или где нужно) — просто читайте данные:
+//
+// -----------------------------------------------------------------------
+// using UnityEngine;
+//
+// public class MetroLineReceiverExample : MonoBehaviour
+// {
+//     private void Start()
+//     {
+//         // Восстанавливаем значения (на случай, если статика ещё не заполнена,
+//         // например при прямом запуске GameScene для отладки).
+//         MetroSession.EnsureLoaded();
+//
+//         string lineId     = MetroSession.SelectedLineId;
+//         string lineName   = MetroSession.SelectedLineName;
+//         string colorKey   = MetroSession.SelectedLineColorKey;
+//         string colorHex   = MetroSession.SelectedLineColorHex;
+//         Color  lineColor  = MetroSession.SelectedLineColor;
+//
+//         // Резервный путь — прямо из PlayerPrefs
+//         if (string.IsNullOrEmpty(lineId))
+//             lineId = PlayerPrefs.GetString("Metro.SelectedLineId", "");
+//         if (string.IsNullOrEmpty(colorKey))
+//             colorKey = PlayerPrefs.GetString("Metro.SelectedLineColor", "");
+//         if (string.IsNullOrEmpty(colorHex))
+//             colorHex = PlayerPrefs.GetString("Metro.SelectedLineColorHex", "");
+//
+//         Debug.Log($"[GameScene] Игрок выбрал линию:");
+//         Debug.Log($"  ID    : {lineId}");
+//         Debug.Log($"  Имя   : {lineName}");
+//         Debug.Log($"  Цвет  : {colorKey} ({colorHex})");
+//
+//         // Дальше используйте lineId / lineName / lineColor по своему усмотрению,
+//         // например: загружайте конфиг по id, красите UI в lineColor и т.п.
+//     }
+// }
+// -----------------------------------------------------------------------
