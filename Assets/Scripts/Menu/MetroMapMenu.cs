@@ -2,6 +2,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -13,8 +14,6 @@ public static class MetroSession
     public static string SelectedLineColorHex;
     public static Color  SelectedLineColor;
 
-    // Полезно вызвать на принимающей сцене: восстановит значения из PlayerPrefs,
-    // если статика ещё не была заполнена (например, если игра запущена сразу с GameScene).
     public static void EnsureLoaded()
     {
         if (string.IsNullOrEmpty(SelectedLineId))
@@ -39,6 +38,14 @@ public class MetroMapMenu : MonoBehaviour
     [Header("Scene")]
     [SerializeField] private string gameSceneName = "GameScene";
     [SerializeField] private string mapResourcePath = "metro_map";
+
+    [Header("Branding")]
+    [Tooltip("Название игры — отображается сверху по центру.")]
+    [SerializeField] private string gameTitle = "METRO";
+    [Tooltip("Строка версии/сборки в левом нижнем углу.")]
+    [SerializeField] private string versionInfo = "v0.1.0 · build 001";
+    [Tooltip("Акцентный цвет для заголовка, разделителя и кнопки выхода.")]
+    [SerializeField] private Color accentColor = new Color(0.42f, 0.72f, 1f, 1f);
 
     [Header("Line Style")]
     [SerializeField] private float lineWidth = 11f;
@@ -71,13 +78,13 @@ public class MetroMapMenu : MonoBehaviour
     [SerializeField] private float spinnerSpeed     = 1.8f;
 
     [Header("Loading Timing")]
-    [Tooltip("Минимальное время (сек), в течение которого экран загрузки должен быть виден, даже если сцена уже загрузилась раньше. Отсчитывается с момента, когда экран загрузки полностью показан.")]
     [SerializeField] private float minLoadingDisplayTime = 1.4f;
 
     private MetroMapData data;
     private Canvas canvas;
     private CanvasGroup mapGroup;
     private CanvasGroup titleGroup;
+    private CanvasGroup brandingGroup;
     private RectTransform mapRoot;
     private RectTransform linesRoot;
     private RectTransform stationsRoot;
@@ -142,9 +149,7 @@ public class MetroMapMenu : MonoBehaviour
 
     private void Update()
     {
-        // Спиннер крутится даже во время transitioning
         UpdateSpinner();
-
         if (transitioning) return;
         hoverTime += Time.deltaTime;
         HandleHoverAndClick();
@@ -154,10 +159,10 @@ public class MetroMapMenu : MonoBehaviour
     // =====================================================================
     private void EnsureEventSystem()
     {
-        if (FindObjectOfType<UnityEngine.EventSystems.EventSystem>() != null) return;
+        if (FindObjectOfType<EventSystem>() != null) return;
         var go = new GameObject("EventSystem");
-        go.AddComponent<UnityEngine.EventSystems.EventSystem>();
-        go.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        go.AddComponent<EventSystem>();
+        go.AddComponent<StandaloneInputModule>();
     }
 
     private void LoadData()
@@ -235,6 +240,41 @@ public class MetroMapMenu : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
     }
 
+    // === NEW: сетка для фона ===
+    private Texture2D CreateGridTexture(int size, int lineWidth)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Repeat;
+        var px = new Color[size * size];
+        for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+        {
+            bool onLine = x < lineWidth || y < lineWidth;
+            px[y * size + x] = onLine ? Color.white : Color.clear;
+        }
+        tex.SetPixels(px); tex.Apply();
+        return tex;
+    }
+
+    // === NEW: виньетка (затемнение по краям) ===
+    private Sprite CreateVignetteSprite(int size)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear; tex.wrapMode = TextureWrapMode.Clamp;
+        float c = size / 2f, maxD = c;
+        var px = new Color[size * size];
+        for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+        {
+            float dx = x + 0.5f - c, dy = y + 0.5f - c;
+            float d = Mathf.Sqrt(dx * dx + dy * dy) / maxD;
+            float a = Mathf.Clamp01((d - 0.35f) / 0.65f);
+            a = a * a;
+            px[y * size + x] = new Color(0, 0, 0, a * 0.7f);
+        }
+        tex.SetPixels(px); tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+    }
+
     // =====================================================================
     private void BuildUI()
     {
@@ -249,39 +289,111 @@ public class MetroMapMenu : MonoBehaviour
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
 
+        // ---- Фон: базовый радиальный градиент ----
         var bg = MakeImage("Background", canvasRT, CreateRadialGradient(512, bgInner, bgOuter), Color.white);
         Stretch(bg);
 
+        // ---- Фон: тонкая сетка (RawImage с uvRect для тайлинга) ----
+        var gridGO = NewUI("Grid", canvasRT);
+        Stretch(gridGO);
+        var gridRaw = gridGO.AddComponent<RawImage>();
+        gridRaw.texture = CreateGridTexture(120, 1);
+        gridRaw.color = new Color(0.35f, 0.5f, 0.8f, 0.055f);
+        gridRaw.raycastTarget = false;
+        gridRaw.uvRect = new Rect(0, 0, 1920f / 120f, 1080f / 120f);
+
+        // ---- Фон: виньетка ----
+        var vignette = MakeImage("Vignette", canvasRT, CreateVignetteSprite(512), Color.white);
+        Stretch(vignette);
+
+        // ============================================================
+        // BRANDING (название игры + свечение + разделитель)
+        // ============================================================
+        var brandGO = NewUI("Branding", canvasRT);
+        var brandRT = RT(brandGO);
+        brandRT.anchorMin = new Vector2(0, 1);
+        brandRT.anchorMax = new Vector2(1, 1);
+        brandRT.pivot = new Vector2(0.5f, 1);
+        brandRT.anchoredPosition = Vector2.zero;
+        brandRT.sizeDelta = new Vector2(0, 100);
+        brandingGroup = brandGO.AddComponent<CanvasGroup>();
+        brandingGroup.alpha = 0f;
+
+        // мягкое свечение за названием
+        var glowGO = NewUI("GameTitleGlow", brandRT);
+        var glowRT = RT(glowGO);
+        glowRT.anchorMin = glowRT.anchorMax = new Vector2(0.5f, 0.5f);
+        glowRT.pivot = new Vector2(0.5f, 0.5f);
+        glowRT.sizeDelta = new Vector2(900, 130);
+        glowRT.anchoredPosition = Vector2.zero;
+        var glowImg = glowGO.AddComponent<Image>();
+        glowImg.sprite = CreateRadialGradient(128,
+            new Color(accentColor.r, accentColor.g, accentColor.b, 0.22f),
+            new Color(accentColor.r, accentColor.g, accentColor.b, 0f));
+        glowImg.raycastTarget = false;
+
+        var gameTitleTxt = MakeText("GameTitle", brandRT, gameTitle, 50,
+            FontStyle.Bold, accentColor, TextAnchor.MiddleCenter);
+        Stretch(gameTitleTxt.gameObject);
+
+        // тонкий разделитель снизу брендинга
+        var sepGO = NewUI("Separator", brandRT);
+        var sepRT = RT(sepGO);
+        sepRT.anchorMin = new Vector2(0.5f, 0);
+        sepRT.anchorMax = new Vector2(0.5f, 0);
+        sepRT.pivot = new Vector2(0.5f, 0);
+        sepRT.sizeDelta = new Vector2(300, 2);
+        sepRT.anchoredPosition = new Vector2(0, 6);
+        var sepImg = sepGO.AddComponent<Image>();
+        sepImg.color = new Color(accentColor.r, accentColor.g, accentColor.b, 0.55f);
+        sepImg.raycastTarget = false;
+
+        // ============================================================
+        // TITLE (схема / hover)
+        // ============================================================
         var titleContainer = NewUI("TitleContainer", canvasRT);
         var titleRT = RT(titleContainer);
-        titleRT.anchorMin = new Vector2(0, 1); titleRT.anchorMax = new Vector2(1, 1);
+        titleRT.anchorMin = new Vector2(0, 1);
+        titleRT.anchorMax = new Vector2(1, 1);
         titleRT.pivot = new Vector2(0.5f, 1f);
-        titleRT.anchoredPosition = Vector2.zero;
-        titleRT.sizeDelta = new Vector2(0, 160);
+        titleRT.anchoredPosition = new Vector2(0, -100);
+        titleRT.sizeDelta = new Vector2(0, 150);
         titleGroup = titleContainer.AddComponent<CanvasGroup>();
+        titleGroup.alpha = 0f;
 
-        titleText = MakeText("Title", titleRT, "СХЕМА СКОРОСТНОГО ТРАНСПОРТА", 46, FontStyle.Bold, titleColor, TextAnchor.MiddleCenter);
+        titleText = MakeText("Title", titleRT, "СХЕМА СКОРОСТНОГО ТРАНСПОРТА", 42,
+            FontStyle.Bold, titleColor, TextAnchor.MiddleCenter);
         var tt = titleText.rectTransform;
         tt.anchorMin = new Vector2(0, 0.55f); tt.anchorMax = new Vector2(1, 1);
         tt.offsetMin = Vector2.zero; tt.offsetMax = Vector2.zero;
 
-        subtitleText = MakeText("Subtitle", titleRT, "Наведите на линию и кликните, чтобы отправиться на неё", 20, FontStyle.Normal, subtitleColor, TextAnchor.MiddleCenter);
+        subtitleText = MakeText("Subtitle", titleRT, "Наведите на линию и кликните, чтобы отправиться на неё",
+            20, FontStyle.Normal, subtitleColor, TextAnchor.MiddleCenter);
         var st = subtitleText.rectTransform;
         st.anchorMin = new Vector2(0, 0); st.anchorMax = new Vector2(1, 0.55f);
         st.offsetMin = Vector2.zero; st.offsetMax = Vector2.zero;
 
+        // ============================================================
+        // HINT (низ по центру)
+        // ============================================================
         var hintContainer = NewUI("HintContainer", canvasRT);
         var hintRT = RT(hintContainer);
-        hintRT.anchorMin = new Vector2(0, 0); hintRT.anchorMax = new Vector2(1, 0);
+        hintRT.anchorMin = new Vector2(0, 0);
+        hintRT.anchorMax = new Vector2(1, 0);
         hintRT.pivot = new Vector2(0.5f, 0);
         hintRT.anchoredPosition = Vector2.zero;
-        hintRT.sizeDelta = new Vector2(0, 70);
-        hintText = MakeText("Hint", hintRT, "Наведите на линию · кликните для входа", 17, FontStyle.Normal, hintColor, TextAnchor.MiddleCenter);
+        hintRT.sizeDelta = new Vector2(0, 60);
+        hintText = MakeText("Hint", hintRT, "Наведите на линию · кликните для входа",
+            17, FontStyle.Normal, hintColor, TextAnchor.MiddleCenter);
         Stretch(hintText.gameObject);
 
+        // ============================================================
+        // MAP ROOT
+        // ============================================================
         mapRoot = RT(NewUI("MapRoot", canvasRT));
         mapRoot.anchorMin = Vector2.zero; mapRoot.anchorMax = Vector2.one;
-        mapRoot.offsetMin = new Vector2(40, 80); mapRoot.offsetMax = new Vector2(-40, -160);
+        mapRoot.offsetMin = new Vector2(40, 90);
+        mapRoot.offsetMax = new Vector2(-40, -250);
         mapRoot.pivot = new Vector2(0.5f, 0.5f);
         mapGroup = mapRoot.gameObject.AddComponent<CanvasGroup>();
         mapGroup.alpha = 0f;
@@ -289,14 +401,97 @@ public class MetroMapMenu : MonoBehaviour
         linesRoot    = RT(NewUI("LinesRoot", mapRoot));    Stretch(linesRoot.gameObject);
         stationsRoot = RT(NewUI("StationsRoot", mapRoot)); Stretch(stationsRoot.gameObject);
 
-        // Затемнение (сначала)...
+        // ============================================================
+        // VERSION (левый нижний угол)
+        // ============================================================
+        var versionGO = NewUI("Version", canvasRT);
+        var versionRT = RT(versionGO);
+        versionRT.anchorMin = new Vector2(0, 0);
+        versionRT.anchorMax = new Vector2(0, 0);
+        versionRT.pivot = new Vector2(0, 0);
+        versionRT.anchoredPosition = new Vector2(30, 22);
+        versionRT.sizeDelta = new Vector2(420, 28);
+        var versionTxt = versionGO.AddComponent<Text>();
+        versionTxt.text = versionInfo;
+        versionTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (versionTxt.font == null) versionTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        versionTxt.fontSize = 14;
+        versionTxt.fontStyle = FontStyle.Normal;
+        versionTxt.color = new Color(0.4f, 0.5f, 0.7f, 0.7f);
+        versionTxt.alignment = TextAnchor.MiddleLeft;
+        versionTxt.raycastTarget = false;
+
+        // ============================================================
+        // EXIT BUTTON (правый нижний угол, иконка-крестик)
+        // ============================================================
+        BuildExitButton(canvasRT);
+
+        // ============================================================
+        // FADE + LOADING
+        // ============================================================
         var fade = NewUI("Fade", canvasRT); Stretch(fade);
         fadeOverlay = fade.AddComponent<Image>();
         fadeOverlay.color = new Color(0, 0, 0, 0);
         fadeOverlay.raycastTarget = false;
 
-        // ...затем экран загрузки — он должен быть ПОВЕРХ затемнения.
         BuildLoadingUI(canvasRT);
+    }
+
+    // =====================================================================
+    //  Exit button (круглая иконка в правом нижнем углу)
+    // =====================================================================
+    private void BuildExitButton(RectTransform canvasRT)
+    {
+        var container = NewUI("ExitButton", canvasRT);
+        var rt = RT(container);
+        rt.anchorMin = rt.anchorMax = new Vector2(1, 0);
+        rt.pivot = new Vector2(1, 0);
+        rt.sizeDelta = new Vector2(64, 64);
+        rt.anchoredPosition = new Vector2(-30, 24);
+
+        var bg = container.AddComponent<Image>();
+        bg.sprite = circleSprite;
+        bg.color = new Color(0.13f, 0.16f, 0.26f, 0.92f);
+        bg.raycastTarget = true;
+
+        var ringGO = NewUI("Ring", rt);
+        Stretch(ringGO);
+        var ringImg = ringGO.AddComponent<Image>();
+        ringImg.sprite = ringSprite;
+        ringImg.color = new Color(accentColor.r, accentColor.g, accentColor.b, 0.35f);
+        ringImg.raycastTarget = false;
+
+        // крестик (две скрещённые линии)
+        float iconSize = 22f;
+        float thickness = 3f;
+
+        var line1 = NewUI("X1", rt);
+        var l1rt = RT(line1);
+        l1rt.anchorMin = l1rt.anchorMax = new Vector2(0.5f, 0.5f);
+        l1rt.pivot = new Vector2(0.5f, 0.5f);
+        l1rt.sizeDelta = new Vector2(iconSize, thickness);
+        l1rt.localRotation = Quaternion.Euler(0, 0, 45);
+        var l1img = line1.AddComponent<Image>();
+        l1img.sprite = whiteSprite;
+        l1img.color = new Color(0.88f, 0.92f, 1f);
+        l1img.raycastTarget = false;
+
+        var line2 = NewUI("X2", rt);
+        var l2rt = RT(line2);
+        l2rt.anchorMin = l2rt.anchorMax = new Vector2(0.5f, 0.5f);
+        l2rt.pivot = new Vector2(0.5f, 0.5f);
+        l2rt.sizeDelta = new Vector2(iconSize, thickness);
+        l2rt.localRotation = Quaternion.Euler(0, 0, -45);
+        var l2img = line2.AddComponent<Image>();
+        l2img.sprite = whiteSprite;
+        l2img.color = new Color(0.88f, 0.92f, 1f);
+        l2img.raycastTarget = false;
+
+        var btn = container.AddComponent<ExitButton>();
+        btn.bg = bg;
+        btn.ring = ringImg;
+        btn.container = rt;
+        btn.accent = accentColor;
     }
 
     // =====================================================================
@@ -311,37 +506,30 @@ public class MetroMapMenu : MonoBehaviour
         loadingGroup.blocksRaycasts = false;
         loadingGroup.interactable = false;
 
-        // Контейнер спиннера
         spinnerRoot = RT(NewUI("Spinner", loadingContainer));
         spinnerRoot.anchorMin = spinnerRoot.anchorMax = new Vector2(0.5f, 0.5f);
         spinnerRoot.pivot = new Vector2(0.5f, 0.5f);
         spinnerRoot.sizeDelta = new Vector2(160f, 160f);
         spinnerRoot.anchoredPosition = new Vector2(0, 40f);
 
-        // Крутящиеся «шарики»
         for (int i = 0; i < spinnerBallCount; i++)
         {
             float ang = (i / (float)spinnerBallCount) * Mathf.PI * 2f;
-
             var ballGO = NewUI("ball_" + i, spinnerRoot);
             var brt = RT(ballGO);
             brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 0.5f);
             brt.pivot = new Vector2(0.5f, 0.5f);
             brt.sizeDelta = new Vector2(spinnerBallSize, spinnerBallSize);
             brt.anchoredPosition = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * spinnerRadius;
-
             var bimg = ballGO.AddComponent<Image>();
             bimg.sprite = circleSprite;
             bimg.color = new Color(1f, 1f, 1f, 0.15f);
             bimg.raycastTarget = false;
-
             spinnerBalls.Add(bimg);
         }
 
-        // Надпись "ЗАГРУЗКА..."
         loadingText = MakeText("LoadingText", RT(loadingContainer), "ЗАГРУЗКА...", 34,
             FontStyle.Bold, new Color(0.93f, 0.95f, 1f), TextAnchor.MiddleCenter);
-
         var ltr = loadingText.rectTransform;
         ltr.anchorMin = ltr.anchorMax = new Vector2(0.5f, 0.5f);
         ltr.pivot = new Vector2(0.5f, 0.5f);
@@ -352,11 +540,9 @@ public class MetroMapMenu : MonoBehaviour
     private void UpdateSpinner()
     {
         if (loadingGroup == null || loadingGroup.alpha <= 0.001f) return;
-
-        float time = Time.unscaledTime; // не зависит от Time.timeScale
+        float time = Time.unscaledTime;
         int n = spinnerBalls.Count;
         if (n == 0) return;
-
         for (int i = 0; i < n; i++)
         {
             float phase = (float)i / n;
@@ -655,6 +841,46 @@ public class MetroMapMenu : MonoBehaviour
     }
 
     // =====================================================================
+    //  Exit button component
+    // =====================================================================
+    public class ExitButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
+    {
+        public Image bg;
+        public Image ring;
+        public RectTransform container;
+        public Color accent = new Color(0.42f, 0.72f, 1f, 1f);
+
+        private float hover, targetHover;
+
+        public void OnPointerEnter(PointerEventData e) { targetHover = 1f; }
+        public void OnPointerExit(PointerEventData e)  { targetHover = 0f; }
+        public void OnPointerClick(PointerEventData e)
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        private void Update()
+        {
+            hover = Mathf.Lerp(hover, targetHover, Time.unscaledDeltaTime * 12f);
+            if (container != null)
+                container.localScale = Vector3.one * (1f + hover * 0.12f);
+            if (bg != null)
+            {
+                bg.color = Color.Lerp(
+                    new Color(0.13f, 0.16f, 0.26f, 0.92f),
+                    new Color(0.55f, 0.18f, 0.22f, 0.95f),
+                    hover);
+            }
+            if (ring != null)
+                ring.color = new Color(accent.r, accent.g, accent.b, 0.35f + hover * 0.55f);
+        }
+    }
+
+    // =====================================================================
     private void HandleHoverAndClick()
     {
         Vector2 localMouse;
@@ -703,7 +929,6 @@ public class MetroMapMenu : MonoBehaviour
         if (transitioning) return;
         transitioning = true;
 
-        // ==== ПЕРЕДАЧА ДАННЫХ НА СЛЕДУЮЩУЮ СЦЕНУ ====
         MetroSession.SelectedLineId        = lv.data.id;
         MetroSession.SelectedLineName      = lv.data.name;
         MetroSession.SelectedLineColorKey  = lv.data.colorKey;
@@ -723,9 +948,6 @@ public class MetroMapMenu : MonoBehaviour
     {
         hovered = null;
 
-        // ==== 1. СНАЧАЛА ПОКАЗЫВАЕМ ЭКРАН ЗАГРУЗКИ ====
-        // Быстро затемняем карту и проявляем экран загрузки — игрок сразу
-        // видит отклик на клик, ещё до старта загрузки сцены.
         float fadeDur = 0.7f;
         float t = 0f;
         Vector3 startScale = mapRoot.localScale;
@@ -739,6 +961,7 @@ public class MetroMapMenu : MonoBehaviour
             mapRoot.localScale = Vector3.Lerp(startScale, endScale, k);
             fadeOverlay.color  = new Color(0, 0, 0, k);
             titleGroup.alpha   = 1f - k;
+            brandingGroup.alpha = 1f - k;
             loadingGroup.alpha = k;
 
             yield return null;
@@ -747,20 +970,14 @@ public class MetroMapMenu : MonoBehaviour
         fadeOverlay.color  = new Color(0, 0, 0, 1f);
         loadingGroup.alpha = 1f;
 
-        // Даём экрану загрузки отрисоваться хотя бы один кадр, чтобы
-        // хитч от LoadSceneAsync был уже «за» спиннером, а не на статичной карте.
         yield return null;
 
-        // ==== 2. ТЕПЕРЬ СТАРТУЕМ АСИНХРОННУЮ ЗАГРУЗКУ GameScene ====
         AsyncOperation loadOp = null;
         bool canLoad = !string.IsNullOrEmpty(gameSceneName);
         if (canLoad)
         {
             loadOp = SceneManager.LoadSceneAsync(gameSceneName, LoadSceneMode.Single);
-            if (loadOp != null)
-            {
-                loadOp.allowSceneActivation = false; // ключевой момент
-            }
+            if (loadOp != null) loadOp.allowSceneActivation = false;
             else
             {
                 Debug.LogError($"[MetroMapMenu] Не удалось начать загрузку сцены '{gameSceneName}'. Проверьте, что она добавлена в Build Settings.");
@@ -772,14 +989,10 @@ public class MetroMapMenu : MonoBehaviour
             Debug.LogError("[MetroMapMenu] gameSceneName не задан — сцена не будет загружена.");
         }
 
-        // ==== 3. Минимальное время показа экрана загрузки ====
-        // Отсчитывается от момента, когда спиннер уже виден.
         float minDisplay = Mathf.Max(0f, minLoadingDisplayTime);
         float elapsed = 0f;
         while (elapsed < minDisplay) { elapsed += Time.deltaTime; yield return null; }
 
-        // ==== 4. Ждём готовности сцены и показываем прогресс ====
-        // При allowSceneActivation = false progress упирается в 0.9 — это и есть "почти готово".
         if (canLoad && loadOp != null)
         {
             while (loadOp.progress < 0.9f)
@@ -793,9 +1006,6 @@ public class MetroMapMenu : MonoBehaviour
             if (loadingText != null)
                 loadingText.text = "ЗАГРУЗКА... 100%";
 
-            // ==== 5. РАЗРЕШАЕМ АКТИВАЦИЮ ====
-            // С этого момента Unity переключает сцены. Мы больше ничего не трогаем —
-            // после активации этот объект и корутина будут уничтожены.
             loadOp.allowSceneActivation = true;
         }
     }
@@ -844,10 +1054,12 @@ public class MetroMapMenu : MonoBehaviour
             k = 1f - Mathf.Pow(1f - k, 3f);
             mapGroup.alpha = k;
             titleGroup.alpha = k;
+            brandingGroup.alpha = k;
             mapRoot.localScale = Vector3.one * Mathf.Lerp(0.94f, 1f, k);
             yield return null;
         }
-        mapGroup.alpha = 1f; titleGroup.alpha = 1f; mapRoot.localScale = Vector3.one;
+        mapGroup.alpha = 1f; titleGroup.alpha = 1f; brandingGroup.alpha = 1f;
+        mapRoot.localScale = Vector3.one;
     }
 
     // =====================================================================
