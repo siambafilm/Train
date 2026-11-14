@@ -70,6 +70,10 @@ public class MetroMapMenu : MonoBehaviour
     [SerializeField] private float spinnerBallSize  = 20f;
     [SerializeField] private float spinnerSpeed     = 1.8f;
 
+    [Header("Loading Timing")]
+    [Tooltip("Минимальное время (сек), в течение которого экран загрузки должен быть виден, даже если сцена уже загрузилась раньше. Отсчитывается с момента, когда экран загрузки полностью показан.")]
+    [SerializeField] private float minLoadingDisplayTime = 1.4f;
+
     private MetroMapData data;
     private Canvas canvas;
     private CanvasGroup mapGroup;
@@ -719,19 +723,17 @@ public class MetroMapMenu : MonoBehaviour
     {
         hovered = null;
 
-        // Короткая пауза после клика — пусть игрок увидит "нажатие"
+        // ==== 1. СНАЧАЛА ПОКАЗЫВАЕМ ЭКРАН ЗАГРУЗКИ ====
+        // Быстро затемняем карту и проявляем экран загрузки — игрок сразу
+        // видит отклик на клик, ещё до старта загрузки сцены.
+        float fadeDur = 0.7f;
         float t = 0f;
-        while (t < 0.35f) { t += Time.deltaTime; yield return null; }
-
-        // Затемнение + одновременное проявление экрана загрузки
-        float dur = 0.7f;
-        t = 0f;
         Vector3 startScale = mapRoot.localScale;
         Vector3 endScale = Vector3.one * 1.15f;
-        while (t < dur)
+        while (t < fadeDur)
         {
             t += Time.deltaTime;
-            float k = Mathf.Clamp01(t / dur);
+            float k = Mathf.Clamp01(t / fadeDur);
             k = 1f - Mathf.Pow(1f - k, 3f);
 
             mapRoot.localScale = Vector3.Lerp(startScale, endScale, k);
@@ -745,13 +747,57 @@ public class MetroMapMenu : MonoBehaviour
         fadeOverlay.color  = new Color(0, 0, 0, 1f);
         loadingGroup.alpha = 1f;
 
-        // Даём спиннеру покрутиться ещё чуть-чуть — ощущение "идёт загрузка"
-        float extra = 0.7f;
-        t = 0f;
-        while (t < extra) { t += Time.deltaTime; yield return null; }
+        // Даём экрану загрузки отрисоваться хотя бы один кадр, чтобы
+        // хитч от LoadSceneAsync был уже «за» спиннером, а не на статичной карте.
+        yield return null;
 
-        if (!string.IsNullOrEmpty(gameSceneName))
-            SceneManager.LoadScene(gameSceneName);
+        // ==== 2. ТЕПЕРЬ СТАРТУЕМ АСИНХРОННУЮ ЗАГРУЗКУ GameScene ====
+        AsyncOperation loadOp = null;
+        bool canLoad = !string.IsNullOrEmpty(gameSceneName);
+        if (canLoad)
+        {
+            loadOp = SceneManager.LoadSceneAsync(gameSceneName, LoadSceneMode.Single);
+            if (loadOp != null)
+            {
+                loadOp.allowSceneActivation = false; // ключевой момент
+            }
+            else
+            {
+                Debug.LogError($"[MetroMapMenu] Не удалось начать загрузку сцены '{gameSceneName}'. Проверьте, что она добавлена в Build Settings.");
+                canLoad = false;
+            }
+        }
+        else
+        {
+            Debug.LogError("[MetroMapMenu] gameSceneName не задан — сцена не будет загружена.");
+        }
+
+        // ==== 3. Минимальное время показа экрана загрузки ====
+        // Отсчитывается от момента, когда спиннер уже виден.
+        float minDisplay = Mathf.Max(0f, minLoadingDisplayTime);
+        float elapsed = 0f;
+        while (elapsed < minDisplay) { elapsed += Time.deltaTime; yield return null; }
+
+        // ==== 4. Ждём готовности сцены и показываем прогресс ====
+        // При allowSceneActivation = false progress упирается в 0.9 — это и есть "почти готово".
+        if (canLoad && loadOp != null)
+        {
+            while (loadOp.progress < 0.9f)
+            {
+                float p = Mathf.Clamp01(loadOp.progress / 0.9f);
+                if (loadingText != null)
+                    loadingText.text = $"ЗАГРУЗКА... {Mathf.RoundToInt(p * 100f)}%";
+                yield return null;
+            }
+
+            if (loadingText != null)
+                loadingText.text = "ЗАГРУЗКА... 100%";
+
+            // ==== 5. РАЗРЕШАЕМ АКТИВАЦИЮ ====
+            // С этого момента Unity переключает сцены. Мы больше ничего не трогаем —
+            // после активации этот объект и корутина будут уничтожены.
+            loadOp.allowSceneActivation = true;
+        }
     }
 
     // =====================================================================
@@ -869,50 +915,3 @@ public class MetroMapMenu : MonoBehaviour
         return best;
     }
 }
-
-// =====================================================================
-// ПРИМЕР ПРИЁМА ЗНАЧЕНИЯ В ДРУГОЙ СЦЕНЕ (GameScene)
-// =====================================================================
-//
-// 1) Скопируйте класс ниже в отдельный файл  Assets/Scripts/Game/MetroLineReceiverExample.cs
-//    (имя файла должно совпадать с именем класса, чтобы его можно было повесить на GameObject).
-//
-// 2) Повесьте этот компонент на любой объект в сцене GameScene.
-//
-// 3) В Start() (или где нужно) — просто читайте данные:
-//
-// -----------------------------------------------------------------------
-// using UnityEngine;
-//
-// public class MetroLineReceiverExample : MonoBehaviour
-// {
-//     private void Start()
-//     {
-//         // Восстанавливаем значения (на случай, если статика ещё не заполнена,
-//         // например при прямом запуске GameScene для отладки).
-//         MetroSession.EnsureLoaded();
-//
-//         string lineId     = MetroSession.SelectedLineId;
-//         string lineName   = MetroSession.SelectedLineName;
-//         string colorKey   = MetroSession.SelectedLineColorKey;
-//         string colorHex   = MetroSession.SelectedLineColorHex;
-//         Color  lineColor  = MetroSession.SelectedLineColor;
-//
-//         // Резервный путь — прямо из PlayerPrefs
-//         if (string.IsNullOrEmpty(lineId))
-//             lineId = PlayerPrefs.GetString("Metro.SelectedLineId", "");
-//         if (string.IsNullOrEmpty(colorKey))
-//             colorKey = PlayerPrefs.GetString("Metro.SelectedLineColor", "");
-//         if (string.IsNullOrEmpty(colorHex))
-//             colorHex = PlayerPrefs.GetString("Metro.SelectedLineColorHex", "");
-//
-//         Debug.Log($"[GameScene] Игрок выбрал линию:");
-//         Debug.Log($"  ID    : {lineId}");
-//         Debug.Log($"  Имя   : {lineName}");
-//         Debug.Log($"  Цвет  : {colorKey} ({colorHex})");
-//
-//         // Дальше используйте lineId / lineName / lineColor по своему усмотрению,
-//         // например: загружайте конфиг по id, красите UI в lineColor и т.п.
-//     }
-// }
-// -----------------------------------------------------------------------
