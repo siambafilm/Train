@@ -20,7 +20,8 @@ public class MetroLineSwitcher : MonoBehaviour
     [Header("Startup")]
     [Tooltip("Если у MetroMapBuilder ещё нет построенных линий — вызвать Build() в Start.")]
     [SerializeField] private bool buildMapIfMissing = true;
-    [Tooltip("С какой линии стартовать в Play Mode. Пусто — первая в списке.")]
+    [Tooltip("С какой линии стартовать в Play Mode. Пусто — первая в списке. " +
+             "Перебивается назначенной линией из MetroSession/PlayerPrefs, если она есть.")]
     [SerializeField] private string startLineId = "";
 
     [Header("Train")]
@@ -62,10 +63,11 @@ public class MetroLineSwitcher : MonoBehaviour
     // ---------------- Internal ----------------
 
     private readonly List<string> _lineIds = new List<string>();
-    private const string LinePrefix     = "Line_";
-    private const string FwdMarkersRoot = "Markers";
-    private const string RevMarkersRoot = "MarkersReverse";
-    private const string TrainRootName  = "MetroTrains";
+    private const string LinePrefix          = "Line_";
+    private const string FwdMarkersRoot      = "Markers";
+    private const string RevMarkersRoot      = "MarkersReverse";
+    private const string TrainRootName       = "MetroTrains";
+    private const string SessionLinePrefsKey = "Metro.SelectedLineId";
 
     private void Awake()
     {
@@ -99,9 +101,18 @@ public class MetroLineSwitcher : MonoBehaviour
 
         ClearAllTrains();
 
-        string target = (!string.IsNullOrEmpty(startLineId) && _lineIds.Contains(startLineId))
-            ? startLineId
-            : _lineIds[0];
+        // Приоритет: назначенная линия (MetroSession/PlayerPrefs) → startLineId → первая в списке.
+        string target = GetAssignedLineId();
+        if (string.IsNullOrEmpty(target) || !_lineIds.Contains(target))
+        {
+            target = (!string.IsNullOrEmpty(startLineId) && _lineIds.Contains(startLineId))
+                ? startLineId
+                : _lineIds[0];
+        }
+
+        if (logVerbose)
+            Debug.Log($"[MetroLineSwitcher] Загружена назначенная линия: '{target}'", this);
+
         SwitchToLine(target);
     }
 
@@ -277,6 +288,39 @@ public class MetroLineSwitcher : MonoBehaviour
     }
 
     // ---------------- Internal helpers ----------------
+
+    /// <summary>
+    /// Назначенная линия из MetroSession / PlayerPrefs (тот же формат, что и MetroSession.SelectedLineId).
+    /// Возвращает пустую строку, если данных нет.
+    /// MetroSession читается через рефлексию — чтобы не тянуть жёсткую зависимость и не ломать сборку,
+    /// если класс ещё не добавлен.
+    /// </summary>
+    private static string GetAssignedLineId()
+    {
+        try
+        {
+            var t = Type.GetType("MetroSession") ?? Type.GetType("MetroSession, Assembly-CSharp");
+            if (t != null)
+            {
+                t.GetMethod("EnsureLoaded",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                    ?.Invoke(null, null);
+
+                var id = t.GetProperty("SelectedLineId",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                    ?.GetValue(null) as string;
+
+                if (!string.IsNullOrEmpty(id)) return id;
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[MetroLineSwitcher] Не удалось прочитать MetroSession.SelectedLineId: {e.Message}");
+        }
+
+        // Резервный путь — прямо из PlayerPrefs (как в примере).
+        return PlayerPrefs.GetString(SessionLinePrefsKey, string.Empty);
+    }
 
     private void ApplyVisibility(string activeLineId)
     {
