@@ -71,6 +71,22 @@ public class MetroMapMenu : MonoBehaviour
     [SerializeField] private float pulseSpeed = 3.5f;
     [SerializeField] private float pulseAmount = 0.12f;
 
+    [Header("Audio")]
+    [Tooltip("Звук при наведении на новую линию.")]
+    [SerializeField] private AudioClip hoverSound;
+    [Tooltip("Звук при подтверждении выбора линии (клик).")]
+    [SerializeField] private AudioClip selectSound;
+    [Tooltip("Громкость hover-звука (0..1).")]
+    [SerializeField, Range(0f, 1f)] private float hoverVolume = 0.55f;
+    [Tooltip("Громкость select-звука (0..1).")]
+    [SerializeField, Range(0f, 1f)] private float selectVolume = 1f;
+    [Tooltip("Минимальный интервал между hover-звуками (сек), чтобы не спамило.")]
+    [SerializeField] private float hoverSoundCooldown = 0.06f;
+    [Tooltip("Случайный разброс высоты тона hover-звука (0 = без разброса).")]
+    [SerializeField, Range(0f, 0.3f)] private float hoverPitchJitter = 0.06f;
+    [Tooltip("Необязательно: свой AudioSource (например, с AudioMixer-группой). Если пусто — будет создан автоматически.")]
+    [SerializeField] private AudioSource sfxSource;
+
     [Header("Loading")]
     [SerializeField] private int   spinnerBallCount = 8;
     [SerializeField] private float spinnerRadius    = 55f;
@@ -122,6 +138,8 @@ public class MetroMapMenu : MonoBehaviour
     private bool transitioning = false;
     private float hoverTime = 0f;
 
+    private float lastHoverSoundTime = -999f;
+
     private Sprite circleSprite;
     private Sprite ringSprite;
     private Sprite whiteSprite;
@@ -154,6 +172,7 @@ public class MetroMapMenu : MonoBehaviour
     private void Start()
     {
         EnsureEventSystem();
+        EnsureAudioSource();
         LoadData();
         GenerateSprites();
         BuildUI();
@@ -179,6 +198,39 @@ public class MetroMapMenu : MonoBehaviour
         var go = new GameObject("EventSystem");
         go.AddComponent<EventSystem>();
         go.AddComponent<StandaloneInputModule>();
+    }
+
+    private void EnsureAudioSource()
+    {
+        if (sfxSource != null) return;
+
+        var audioGO = new GameObject("MetroMenuAudio");
+        audioGO.transform.SetParent(transform, false);
+
+        sfxSource = audioGO.AddComponent<AudioSource>();
+        sfxSource.playOnAwake  = false;
+        sfxSource.loop         = false;
+        sfxSource.spatialBlend = 0f;
+        sfxSource.volume       = 1f;
+    }
+
+    private void PlayHoverSound()
+    {
+        if (hoverSound == null || sfxSource == null) return;
+
+        if (Time.unscaledTime - lastHoverSoundTime < hoverSoundCooldown) return;
+        lastHoverSoundTime = Time.unscaledTime;
+
+        float oldPitch = sfxSource.pitch;
+        sfxSource.pitch = 1f + Random.Range(-hoverPitchJitter, hoverPitchJitter);
+        sfxSource.PlayOneShot(hoverSound, hoverVolume);
+        sfxSource.pitch = oldPitch;
+    }
+
+    private void PlaySelectSound()
+    {
+        if (selectSound == null || sfxSource == null) return;
+        sfxSource.PlayOneShot(selectSound, selectVolume);
     }
 
     private void LoadData()
@@ -475,7 +527,7 @@ public class MetroMapMenu : MonoBehaviour
             new LivingBackground.BlobDef
             {
                 color       = livingBlob1Color,
-                basePos     = new Vector2(-0.32f,  0.25f),   // относительно центра экрана
+                basePos     = new Vector2(-0.32f,  0.25f),
                 baseSize    = 1700f,
                 phase       = 0f,
                 orbitRadius = 130f,
@@ -1108,6 +1160,8 @@ public class MetroMapMenu : MonoBehaviour
             subtitleText.text = "Кликните, чтобы начать игру на этой линии";
             subtitleText.color = new Color(hovered.color.r, hovered.color.g, hovered.color.b, 0.85f);
             hintText.text = $"→ Перейти на «{hovered.data.name}»";
+
+            PlayHoverSound();
         }
         else
         {
@@ -1123,6 +1177,8 @@ public class MetroMapMenu : MonoBehaviour
     {
         if (transitioning) return;
         transitioning = true;
+
+        PlaySelectSound();
 
         MetroSession.SelectedLineId        = lv.data.id;
         MetroSession.SelectedLineName      = lv.data.name;
