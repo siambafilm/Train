@@ -80,6 +80,21 @@ public class MetroMapMenu : MonoBehaviour
     [Header("Loading Timing")]
     [SerializeField] private float minLoadingDisplayTime = 1.4f;
 
+    [Header("Living Background")]
+    [SerializeField] private bool  enableLivingBackground = true;
+    [Tooltip("Первый цвет мягкого пятна (по умолчанию — синий).")]
+    [SerializeField] private Color livingBlob1Color = new Color(0.22f, 0.55f, 1.00f);
+    [Tooltip("Второй цвет мягкого пятна (по умолчанию — фиолетовый).")]
+    [SerializeField] private Color livingBlob2Color = new Color(0.60f, 0.28f, 0.90f);
+    [Tooltip("Третий цвет мягкого пятна (по умолчанию — бирюзовый).")]
+    [SerializeField] private Color livingBlob3Color = new Color(0.20f, 0.75f, 0.75f);
+    [Tooltip("Скорость орбитального движения пятен.")]
+    [SerializeField] private float livingMovementSpeed = 1f;
+    [Tooltip("Скорость пульсации размера/альфы пятен.")]
+    [SerializeField] private float livingPulseSpeed = 1f;
+    [Tooltip("Общая интенсивность живого градиента (0 = выключено, 1 = норма).")]
+    [SerializeField] private float livingIntensity = 1f;
+
     private MetroMapData data;
     private Canvas canvas;
     private CanvasGroup mapGroup;
@@ -92,6 +107,7 @@ public class MetroMapMenu : MonoBehaviour
     private Text subtitleText;
     private Text hintText;
     private Image fadeOverlay;
+    private Image bgBaseImage;
 
     // --- Loading UI ---
     private CanvasGroup loadingGroup;
@@ -240,7 +256,7 @@ public class MetroMapMenu : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
     }
 
-    // === NEW: сетка для фона ===
+    // === сетка для фона ===
     private Texture2D CreateGridTexture(int size, int lineWidth)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -256,7 +272,7 @@ public class MetroMapMenu : MonoBehaviour
         return tex;
     }
 
-    // === NEW: виньетка (затемнение по краям) ===
+    // === виньетка (затемнение по краям) ===
     private Sprite CreateVignetteSprite(int size)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -292,6 +308,11 @@ public class MetroMapMenu : MonoBehaviour
         // ---- Фон: базовый радиальный градиент ----
         var bg = MakeImage("Background", canvasRT, CreateRadialGradient(512, bgInner, bgOuter), Color.white);
         Stretch(bg);
+        bgBaseImage = bg.GetComponent<Image>();
+
+        // ---- Фон: живой анимированный градиент (поверх базового, под сеткой) ----
+        if (enableLivingBackground)
+            BuildLivingBackground(canvasRT);
 
         // ---- Фон: тонкая сетка (RawImage с uvRect для тайлинга) ----
         var gridGO = NewUI("Grid", canvasRT);
@@ -435,6 +456,72 @@ public class MetroMapMenu : MonoBehaviour
         fadeOverlay.raycastTarget = false;
 
         BuildLoadingUI(canvasRT);
+    }
+
+    // =====================================================================
+    //  Living background: медленно движущиеся мягкие пятна + дыхание базы
+    // =====================================================================
+    private void BuildLivingBackground(RectTransform canvasRT)
+    {
+        var livingGO = NewUI("LivingBackground", canvasRT);
+        Stretch(livingGO);
+        var living = livingGO.AddComponent<LivingBackground>();
+
+        // мягкий белый радиальный градиент — красим тинтом через Image.color
+        var blobSprite = CreateRadialGradient(256, Color.white, new Color(1f, 1f, 1f, 0f));
+
+        var blobs = new[]
+        {
+            new LivingBackground.BlobDef
+            {
+                color       = livingBlob1Color,
+                basePos     = new Vector2(-0.32f,  0.25f),   // относительно центра экрана
+                baseSize    = 1700f,
+                phase       = 0f,
+                orbitRadius = 130f,
+                orbitSpeed  = 0.12f,
+                pulseSpeed  = 0.22f,
+                alphaBase   = 0.42f,
+                alphaAmp    = 0.10f,
+                colorDrift  = 0.06f
+            },
+            new LivingBackground.BlobDef
+            {
+                color       = livingBlob2Color,
+                basePos     = new Vector2( 0.40f, -0.30f),
+                baseSize    = 1500f,
+                phase       = 2.1f,
+                orbitRadius = 160f,
+                orbitSpeed  = 0.09f,
+                pulseSpeed  = 0.18f,
+                alphaBase   = 0.35f,
+                alphaAmp    = 0.09f,
+                colorDrift  = 0.08f
+            },
+            new LivingBackground.BlobDef
+            {
+                color       = livingBlob3Color,
+                basePos     = new Vector2( 0.28f,  0.35f),
+                baseSize    = 1300f,
+                phase       = 4.3f,
+                orbitRadius = 150f,
+                orbitSpeed  = 0.11f,
+                pulseSpeed  = 0.26f,
+                alphaBase   = 0.30f,
+                alphaAmp    = 0.08f,
+                colorDrift  = 0.10f
+            }
+        };
+
+        for (int i = 0; i < blobs.Length; i++)
+        {
+            blobs[i].orbitSpeed *= livingMovementSpeed;
+            blobs[i].pulseSpeed *= livingPulseSpeed;
+            blobs[i].alphaBase  = Mathf.Clamp01(blobs[i].alphaBase * livingIntensity);
+            blobs[i].alphaAmp   = Mathf.Clamp01(blobs[i].alphaAmp  * livingIntensity);
+        }
+
+        living.Initialize(blobSprite, blobs, bgBaseImage);
     }
 
     // =====================================================================
@@ -877,6 +964,114 @@ public class MetroMapMenu : MonoBehaviour
             }
             if (ring != null)
                 ring.color = new Color(accent.r, accent.g, accent.b, 0.35f + hover * 0.55f);
+        }
+    }
+
+    // =====================================================================
+    //  Living background component
+    // =====================================================================
+    public class LivingBackground : MonoBehaviour
+    {
+        public struct BlobDef
+        {
+            public Color   color;
+            public Vector2 basePos;
+            public float   baseSize;
+            public float   phase;
+            public float   orbitRadius;
+            public float   orbitSpeed;
+            public float   pulseSpeed;
+            public float   alphaBase;
+            public float   alphaAmp;
+            public float   colorDrift;
+        }
+
+        private class Blob
+        {
+            public BlobDef def;
+            public RectTransform rt;
+            public Image img;
+        }
+
+        private Blob[] blobs;
+        private Image  baseBg;
+        private Color  baseBgColor;
+        private float  time;
+
+        public void Initialize(Sprite blobSprite, BlobDef[] defs, Image baseBgImage)
+        {
+            baseBg = baseBgImage;
+            if (baseBg != null) baseBgColor = baseBg.color;
+
+            blobs = new Blob[defs.Length];
+            for (int i = 0; i < defs.Length; i++)
+            {
+                var def = defs[i];
+
+                var go = new GameObject("Blob_" + i, typeof(RectTransform));
+                go.transform.SetParent(transform, false);
+
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f + def.basePos.x, 0.5f + def.basePos.y);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta = new Vector2(def.baseSize, def.baseSize);
+                rt.anchoredPosition = Vector2.zero;
+
+                var img = go.AddComponent<Image>();
+                img.sprite = blobSprite;
+                img.color  = def.color;
+                img.raycastTarget = false;
+
+                blobs[i] = new Blob { def = def, rt = rt, img = img };
+            }
+        }
+
+        private void Update()
+        {
+            time += Time.unscaledDeltaTime;
+
+            // Очень мягкое «дыхание» базового градиента
+            if (baseBg != null)
+            {
+                float breath = Mathf.Sin(time * 0.18f) * 0.5f + 0.5f;
+                var c = baseBgColor;
+                c.r *= Mathf.Lerp(0.90f, 1.05f, breath);
+                c.g *= Mathf.Lerp(0.94f, 1.08f, breath);
+                c.b *= Mathf.Lerp(1.02f, 1.15f, breath);
+                baseBg.color = c;
+            }
+
+            if (blobs == null) return;
+
+            for (int i = 0; i < blobs.Length; i++)
+            {
+                var b = blobs[i];
+                if (b.rt == null || b.img == null) continue;
+                var d = b.def;
+
+                float t = time;
+
+                // Орбитальное движение (эллипс, чуть разный период по осям)
+                float ox = Mathf.Cos(d.phase + t * d.orbitSpeed) * d.orbitRadius;
+                float oy = Mathf.Sin(d.phase + t * d.orbitSpeed * 1.27f) * d.orbitRadius * 0.75f;
+                b.rt.anchoredPosition = new Vector2(ox, oy);
+
+                // Пульсация размера
+                float sizePulse = 1f + Mathf.Sin(t * d.pulseSpeed + d.phase) * 0.09f;
+                b.rt.sizeDelta = new Vector2(d.baseSize, d.baseSize) * sizePulse;
+
+                // Пульсация альфы + цветовой дрейф
+                float drift = Mathf.Sin(t * 0.06f + d.phase * 1.7f) * d.colorDrift;
+
+                var c = d.color;
+                c.r = Mathf.Clamp01(d.color.r + drift);
+                c.g = Mathf.Clamp01(d.color.g - drift * 0.6f);
+                c.b = Mathf.Clamp01(d.color.b + drift * 0.4f);
+                c.a = Mathf.Clamp01(d.alphaBase
+                    + Mathf.Sin(t * d.pulseSpeed * 0.85f + d.phase * 1.5f) * d.alphaAmp);
+
+                b.img.color = c;
+            }
         }
     }
 
