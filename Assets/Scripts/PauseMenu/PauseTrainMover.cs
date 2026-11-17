@@ -24,9 +24,54 @@ namespace PauseMenu
         [SerializeField] private Vector3 tiltEuler = Vector3.zero;
         [SerializeField] private float safetyTimeout = 15f;
 
+        [Header("Fall Down Exit")]
+        [SerializeField] private float fallDuration = 0.7f;
+        [Tooltip("На сколько метров вниз уронить поезд и рельсы. Должно хватить, чтобы скрылось из вида камеры.")]
+        [SerializeField] private float fallDistance = 30f;
+        [SerializeField] private float fallTilt = 25f;
+        [SerializeField] private AnimationCurve fallCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+
         private GameObject _trainInstance;
         private GameObject _railsInstance;
 
+        public IEnumerator FallDown()
+        {
+            var targets = new System.Collections.Generic.List<Transform>(2);
+            if (_trainInstance != null) targets.Add(_trainInstance.transform);
+            if (_railsInstance != null) targets.Add(_railsInstance.transform);
+            if (targets.Count == 0) yield break;
+
+            int n = targets.Count;
+            var startPos = new Vector3[n];
+            var startRot = new Quaternion[n];
+            for (int i = 0; i < n; i++)
+            {
+                startPos[i] = targets[i].position;
+                startRot[i] = targets[i].rotation;
+            }
+
+            AnimationCurve curve = (fallCurve == null || fallCurve.length == 0)
+                ? AnimationCurve.EaseInOut(0f, 0f, 1f, 1f)
+                : fallCurve;
+
+            float dur = Mathf.Max(0.0001f, fallDuration);
+            float elapsed = 0f;
+
+            while (elapsed < dur)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / dur);
+                float e = curve.Evaluate(t);
+
+                for (int i = 0; i < n; i++)
+                {
+                    if (targets[i] == null) continue;
+                    targets[i].position = startPos[i] + Vector3.down * (fallDistance * e);
+                    targets[i].rotation = startRot[i] * Quaternion.Euler(fallTilt * e, 0f, 0f);
+                }
+                yield return null;
+            }
+        }
         public void ResetTrain()
         {
             if (_trainInstance != null) Destroy(_trainInstance);
