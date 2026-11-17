@@ -33,6 +33,10 @@ namespace PauseMenu
         [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
         [SerializeField] private int canvasSortingOrder = 100;
 
+        [Header("Fan Direction")]
+        [Tooltip("0 — вверх, 90 — вправо, -90 — влево, 180 — вниз. Промежуточные — по вкусу.")]
+        [SerializeField] private float fanBaseAngle = -90f;
+
         private RectTransform _fanRoot;
         private readonly List<RectTransform> _items = new List<RectTransform>();
 
@@ -168,16 +172,20 @@ namespace PauseMenu
         {
             var rt = _items[index];
 
-            // t01: 0 — левый край, 0.5 — центр, 1 — правый край
+            // t01: 0 — левый край, 0.5 — центр, 1 — правый край (в системе веера)
             float t01 = total <= 1 ? 0.5f : (float)index / (total - 1);
-            float angle = Mathf.Lerp(-fanAngle * 0.5f, fanAngle * 0.5f, t01);
-            float rad = angle * Mathf.Deg2Rad;
 
-            // angle == 0 => "вверх" от центра веера
+            // Разброс внутри веера (симметрично относительно fanBaseAngle)
+            float spread = Mathf.Lerp(-fanAngle * 0.5f, fanAngle * 0.5f, t01);
+            float angle  = fanBaseAngle + spread;
+            float rad    = angle * Mathf.Deg2Rad;
+
             Vector2 target = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad)) * fanRadius;
             Vector2 start  = Vector2.zero;
 
-            Quaternion startRot = Quaternion.Euler(0f, 0f, angle);
+            // Радиальный наклон: пункт «смотрит» вдоль луча от центра веера.
+            // Именно -angle даёт классический веер (лепестки раскрываются наружу).
+            Quaternion startRot = Quaternion.Euler(0f, 0f, -angle);
             Quaternion endRot   = Quaternion.identity;
 
             AnimationCurve curve = (revealCurve == null || revealCurve.length == 0)
