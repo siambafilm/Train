@@ -24,6 +24,9 @@ public class CabinController : MonoBehaviour
 
     void Update()
     {
+        // Пока пауза открыта — не крутим камеру, не кликаем, не скроллим.
+        if (IsGamePaused()) return;
+
         // 1. Вращение камеры
         rotationY += Input.GetAxis("Mouse X") * mouseSensitivity;
         rotationX -= Input.GetAxis("Mouse Y") * mouseSensitivity;
@@ -36,6 +39,12 @@ public class CabinController : MonoBehaviour
 
         // 3. Скролл по рычагу / реверсору
         ProcessLeverScroll();
+    }
+
+    private static bool IsGamePaused()
+    {
+        var pause = PauseMenu.PauseMenuController.Instance;
+        return pause != null && pause.IsPaused;
     }
 
     private void ProcessClick()

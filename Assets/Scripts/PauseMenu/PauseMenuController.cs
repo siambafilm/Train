@@ -6,6 +6,8 @@ namespace PauseMenu
 {
     public class PauseMenuController : MonoBehaviour
     {
+        public static PauseMenuController Instance { get; private set; }
+
         [Header("Refs")]
         [SerializeField] private GameObject pauseMenuRoot;
         [SerializeField] private PauseTrainMover trainMover;
@@ -36,6 +38,10 @@ namespace PauseMenu
         [Tooltip("Скрывать TrainHUD (точку и меню) на время паузы и восстанавливать после.")]
         [SerializeField] private bool hideHudDuringPause = true;
 
+        [Header("Cursor")]
+        [Tooltip("Показывать и разлочивать курсор во время паузы, восстанавливать после.")]
+        [SerializeField] private bool manageCursorDuringPause = true;
+
         public bool IsPaused { get; private set; }
 
         private Coroutine _openRoutine;
@@ -46,17 +52,35 @@ namespace PauseMenu
         private GameObject _snapshotQuad;
         private Material _snapshotMaterial;
 
-        // Камера, снятая в момент открытия паузы (1-е или 3-е лицо — что было активно).
         private Camera _pausedGameplayCamera;
 
-        // Сохранённое состояние TrainHUD на момент открытия паузы.
+        // Сохранённое состояние TrainHUD
         private bool _hudStateSaved;
         private bool _savedDotVisible;
         private bool _savedMenuVisible;
         private bool _savedHotkeyActive;
 
+        // Сохранённое состояние курсора
+        private CursorLockMode _savedCursorLockMode;
+        private bool _savedCursorVisible;
+
         private bool MenuCameraIsSeparate =>
             menuCamera != null && !menuCamera.transform.IsChildOf(pauseMenuRoot.transform);
+
+        private void Awake()
+        {
+            if (Instance == null) Instance = this;
+            else Debug.LogWarning("[PauseMenuController] На сцене несколько PauseMenuController — оставь один!");
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+
+            if (_snapshotRT != null)       { _snapshotRT.Release(); Destroy(_snapshotRT); _snapshotRT = null; }
+            if (_snapshotMaterial != null) { Destroy(_snapshotMaterial); _snapshotMaterial = null; }
+            if (_snapshotQuad != null)     { Destroy(_snapshotQuad);     _snapshotQuad     = null; }
+        }
 
         private void Update()
         {
@@ -74,10 +98,13 @@ namespace PauseMenu
             if (IsPaused || _isClosing) return;
             IsPaused = true;
 
-            // 1. Прячем HUD — до снимка/анимаций, чтобы ничего не мигало.
+            // 1. Курсор — сразу, чтобы игрок мог работать с меню.
+            if (manageCursorDuringPause) ApplyPauseCursor();
+
+            // 2. Прячем HUD — до снимка/анимаций.
             HideHudForPause();
 
-            // 2. Актуальная игровая камера на этот момент (1-е/3-е лицо, любая активная).
+            // 3. Актуальная игровая камера.
             _pausedGameplayCamera = GetActiveGameplayCamera();
 
             if (useSnapshotBackground) CaptureSnapshot(_pausedGameplayCamera);
@@ -139,14 +166,14 @@ namespace PauseMenu
 
             Time.timeScale = 1f;
 
-            // Возвращаем включённость той же камере, которую выключали (если она ещё жива).
             if (disableGameplayCameraWhilePaused && _pausedGameplayCamera != null)
                 _pausedGameplayCamera.enabled = true;
 
             _pausedGameplayCamera = null;
 
-            // Восстанавливаем HUD ровно в том виде, в котором он был до паузы.
             RestoreHudAfterPause();
+
+            if (manageCursorDuringPause) RestoreCursorAfterPause();
 
             _isClosing = false;
             _closeRoutine = null;
@@ -186,17 +213,29 @@ namespace PauseMenu
             TrainHUD.Instance.SetHotkeyActive(_savedHotkeyActive);
         }
 
+        // ---------- Cursor ----------
+
+        private void ApplyPauseCursor()
+        {
+            _savedCursorLockMode = Cursor.lockState;
+            _savedCursorVisible  = Cursor.visible;
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
+        }
+
+        private void RestoreCursorAfterPause()
+        {
+            Cursor.lockState = _savedCursorLockMode;
+            Cursor.visible   = _savedCursorVisible;
+        }
+
         // ---------- Active gameplay camera lookup ----------
 
-        /// <summary>
-        /// Возвращает активную игровую камеру: любую включённую Camera в сцене, кроме menuCamera
-        /// и камер, вложенных в pauseMenuRoot. Именно это позволяет работать с CameraManager
-        /// без ручного назначения в инспекторе.
-        /// </summary>
         private Camera GetActiveGameplayCamera()
         {
             Camera best = null;
-            var cams = Camera.allCameras; // уже отфильтрованы по enabled + activeInHierarchy
+            var cams = Camera.allCameras;
             foreach (var cam in cams)
             {
                 if (cam == null) continue;
@@ -217,8 +256,7 @@ namespace PauseMenu
             if (sourceCamera == null || menuCamera == null)
             {
                 if (useSnapshotBackground)
-                    Debug.LogWarning("[PauseMenuController] Активная игровая камера не найдена — snapshot-фон пропущен. " +
-                                     "Проверь, что хотя бы одна игровая Camera сейчас активна.");
+                    Debug.LogWarning("[PauseMenuController] Активная игровая камера не найдена — snapshot-фон пропущен.");
                 return;
             }
 
@@ -318,13 +356,6 @@ namespace PauseMenu
             }
 
             t.localScale = new Vector3(width * 1.05f, height * 1.05f, 1f);
-        }
-
-        private void OnDestroy()
-        {
-            if (_snapshotRT != null)       { _snapshotRT.Release(); Destroy(_snapshotRT); _snapshotRT = null; }
-            if (_snapshotMaterial != null) { Destroy(_snapshotMaterial); _snapshotMaterial = null; }
-            if (_snapshotQuad != null)     { Destroy(_snapshotQuad);     _snapshotQuad     = null; }
         }
     }
 }
