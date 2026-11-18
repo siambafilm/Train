@@ -784,6 +784,7 @@ GameObject:
   - component: {fileID: 577544871809031824}
   - component: {fileID: 2131492550008120970}
   - component: {fileID: 5396760155928776982}
+  - component: {fileID: 5845913337191206086}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -923,8 +924,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CabinController
   mouseSensitivity: 2
   verticalLookLimit: 60
+--- !u!114 &5845913337191206086
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5419017986689378913}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44900a7980bf0ba428cb6bd37d390f25, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrainHUD
+  showDot: 1
   dotColor: {r: 1, g: 1, b: 1, a: 1}
   dotSize: 4
+  showMenu: 1
+  useKeyboardShortcut: 1
+  toggleMenuKey: 104
 --- !u!1 &5802055655997774077
 GameObject:
   m_ObjectHideFlags: 0

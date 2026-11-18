@@ -32,6 +32,10 @@ namespace PauseMenu
         [Tooltip("Тинт снимка. RGB — затемнение (0.35 = тёмный), A — прозрачность (оставь 1).")]
         [SerializeField] private Color snapshotTint = new Color(0.35f, 0.35f, 0.35f, 1f);
 
+        [Header("HUD")]
+        [Tooltip("Скрывать TrainHUD (точку и меню) на время паузы и восстанавливать после.")]
+        [SerializeField] private bool hideHudDuringPause = true;
+
         public bool IsPaused { get; private set; }
 
         private Coroutine _openRoutine;
@@ -44,6 +48,12 @@ namespace PauseMenu
 
         // Камера, снятая в момент открытия паузы (1-е или 3-е лицо — что было активно).
         private Camera _pausedGameplayCamera;
+
+        // Сохранённое состояние TrainHUD на момент открытия паузы.
+        private bool _hudStateSaved;
+        private bool _savedDotVisible;
+        private bool _savedMenuVisible;
+        private bool _savedHotkeyActive;
 
         private bool MenuCameraIsSeparate =>
             menuCamera != null && !menuCamera.transform.IsChildOf(pauseMenuRoot.transform);
@@ -64,7 +74,10 @@ namespace PauseMenu
             if (IsPaused || _isClosing) return;
             IsPaused = true;
 
-            // Актуальная игровая камера на этот момент (1-е/3-е лицо, любая активная).
+            // 1. Прячем HUD — до снимка/анимаций, чтобы ничего не мигало.
+            HideHudForPause();
+
+            // 2. Актуальная игровая камера на этот момент (1-е/3-е лицо, любая активная).
             _pausedGameplayCamera = GetActiveGameplayCamera();
 
             if (useSnapshotBackground) CaptureSnapshot(_pausedGameplayCamera);
@@ -132,6 +145,9 @@ namespace PauseMenu
 
             _pausedGameplayCamera = null;
 
+            // Восстанавливаем HUD ровно в том виде, в котором он был до паузы.
+            RestoreHudAfterPause();
+
             _isClosing = false;
             _closeRoutine = null;
         }
@@ -140,6 +156,34 @@ namespace PauseMenu
         {
             yield return StartCoroutine(routine);
             onDone?.Invoke();
+        }
+
+        // ---------- HUD save / restore ----------
+
+        private void HideHudForPause()
+        {
+            if (!hideHudDuringPause) return;
+            if (TrainHUD.Instance == null) return;
+
+            _savedDotVisible   = TrainHUD.Instance.IsDotVisible;
+            _savedMenuVisible  = TrainHUD.Instance.IsMenuVisible;
+            _savedHotkeyActive = TrainHUD.Instance.HotkeyEnabled;
+            _hudStateSaved     = true;
+
+            TrainHUD.Instance.SetHotkeyActive(false);
+            TrainHUD.Instance.HideAll();
+        }
+
+        private void RestoreHudAfterPause()
+        {
+            if (!_hudStateSaved) return;
+            _hudStateSaved = false;
+
+            if (TrainHUD.Instance == null) return;
+
+            TrainHUD.Instance.SetDotVisible(_savedDotVisible);
+            TrainHUD.Instance.SetMenuVisible(_savedMenuVisible);
+            TrainHUD.Instance.SetHotkeyActive(_savedHotkeyActive);
         }
 
         // ---------- Active gameplay camera lookup ----------
@@ -160,7 +204,6 @@ namespace PauseMenu
                 if (pauseMenuRoot != null && cam.transform.IsChildOf(pauseMenuRoot.transform)) continue;
                 if (cam.cameraType == CameraType.Preview || cam.cameraType == CameraType.Reflection) continue;
 
-                // На всякий случай — берём с наибольшей depth (если их несколько).
                 if (best == null || cam.depth > best.depth)
                     best = cam;
             }
@@ -199,7 +242,6 @@ namespace PauseMenu
                 _snapshotRT.Create();
             }
 
-            // Снимаем RT с материала до записи — иначе на части драйверов можно получить старый/мерцающий кадр.
             if (_snapshotMaterial != null)
                 _snapshotMaterial.mainTexture = null;
 
