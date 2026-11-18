@@ -532,6 +532,7 @@ public class MetroNavigator : MonoBehaviour
 
     private void HandleFullInput()
     {
+        // --- Панорамирование ---
         if (Input.GetMouseButtonDown(0))
         {
             isDragging = true;
@@ -551,24 +552,36 @@ public class MetroNavigator : MonoBehaviour
             }
         }
 
+        // --- Зум к курсору ---
         float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (Mathf.Abs(scroll) > 0.001f)
-        {
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                fullMaskRect, Input.mousePosition, null, out Vector2 mouseLocal))
-            {
-                float oldScale = fullContentRoot.localScale.x;
-                Vector2 before = (mouseLocal - (Vector2)fullContentRoot.localPosition) / oldScale;
+        if (Mathf.Abs(scroll) <= 0.001f) return;
 
-                fullZoom = Mathf.Clamp(
-                    fullZoom * (scroll > 0 ? fullZoomStep : 1f / fullZoomStep),
-                    fullZoomMin, fullZoomMax);
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            fullMaskRect, Input.mousePosition, null, out Vector2 mouseLocal)) return;
 
-                float newScale = fullFitScale * fullZoom;
-                fullContentRoot.localScale = Vector3.one * newScale;
-                fullContentRoot.localPosition = (Vector3)(mouseLocal - before * newScale);
-            }
-        }
+        // КРИТИЧНО: текущий зум берём из фактического масштаба, а не из переменной fullZoom.
+        // Если AnimateOpen/AnimateClose оставили localScale не равным fullFitScale * fullZoom —
+        // здесь это не сломает первый скролл.
+        float oldScale = fullContentRoot.localScale.x;
+        if (oldScale < 0.0001f) oldScale = 0.0001f;
+
+        float currentZoom = fullFitScale > 0.0001f
+            ? oldScale / fullFitScale
+            : 1f;
+
+        float targetZoom = Mathf.Clamp(
+            currentZoom * (scroll > 0f ? fullZoomStep : 1f / fullZoomStep),
+            fullZoomMin, fullZoomMax);
+
+        // Точка под курсором ДО зума (в координатах контента)
+        Vector2 before = (mouseLocal - (Vector2)fullContentRoot.localPosition) / oldScale;
+
+        float newScale = fullFitScale * targetZoom;
+        fullContentRoot.localScale = Vector3.one * newScale;
+        fullContentRoot.localPosition = (Vector3)(mouseLocal - before * newScale);
+
+        // Синхронизируем переменную, чтобы она не разъезжалась
+        fullZoom = targetZoom;
     }
 
     // ------- Анимации открытия/закрытия -------
@@ -577,6 +590,12 @@ public class MetroNavigator : MonoBehaviour
     {
         isTransitioning = true;
         isFullOpen = true;
+
+        // Пересчитать fit-scale после layout — на первом кадре Start() rect ещё мог быть 0.
+        fullFitScale = ComputeFitScale(
+            GetFullFrameWidth()  * fullFitPadding,
+            GetFullFrameHeight() * fullFitPadding);
+        if (fullFitScale < 0.0001f) fullFitScale = 1f; // safety
 
         prevTimeScale = Time.timeScale;
         Time.timeScale = timeScaleOnOpen;
