@@ -44,7 +44,13 @@ public class CabinController : MonoBehaviour
     private static bool IsGamePaused()
     {
         var pause = PauseMenu.PauseMenuController.Instance;
-        return pause != null && pause.IsPaused;
+        if (pause != null && pause.IsPaused) return true;
+
+        // НОВОЕ: при открытой большой карте навигатора — не управляем камерой
+        var nav = MetroNavigator.Instance;
+        if (nav != null && nav.IsFullMapOpen) return true;
+
+        return false;
     }
 
     private void ProcessClick()

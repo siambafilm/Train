@@ -96,6 +96,11 @@ namespace PauseMenu
         public void OpenMenu()
         {
             if (IsPaused || _isClosing) return;
+            
+            // НОВОЕ: не открываем паузу поверх большой карты навигатора
+            var nav = MetroNavigator.Instance;
+            if (nav != null && nav.IsFullMapOpen) return;
+
             IsPaused = true;
 
             // 1. Курсор — сразу, чтобы игрок мог работать с меню.

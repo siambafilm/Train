@@ -34,7 +34,10 @@ public class CameraManager : MonoBehaviour
 
     void Update()
     {
-        // Переключение доступно только если нет активного FirstPersonOnly-блока
+        // НОВОЕ: пока открыта большая карта навигатора — не переключаем камеру
+        var nav = MetroNavigator.Instance;
+        if (nav != null && nav.IsFullMapOpen) return;
+
         if (Input.GetKeyDown(toggleKey) && !lockedToFirstPerson)
         {
             isFirstPerson = !isFirstPerson;
@@ -121,6 +124,10 @@ public class CameraManager : MonoBehaviour
         if (firstPersonCamera != null) firstPersonCamera.SetActive(isFirstPerson);
         if (thirdPersonCamera != null && thirdPersonCamera != firstPersonCamera)
             thirdPersonCamera.SetActive(!isFirstPerson);
+
+        // НОВОЕ: если открыта карта — не перебиваем курсор
+        var nav = MetroNavigator.Instance;
+        if (nav != null && nav.IsFullMapOpen) return;
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
