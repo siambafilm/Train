@@ -23,6 +23,8 @@ public class CameraManager : MonoBehaviour
             return;
         }
         Instance = this;
+
+        ResolveFirstPersonCamera();
     }
 
     void Start()
@@ -42,6 +44,49 @@ public class CameraManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Если в инспекторе не назначена камера от первого лица — подхватываем активную камеру сцены
+    /// (обычно это MainCamera). Вызывается один раз в Awake.
+    /// </summary>
+    private void ResolveFirstPersonCamera()
+    {
+        if (firstPersonCamera != null) return;
+
+        Camera activeCam = Camera.main;
+
+        // Camera.main ищет только объекты с тегом "MainCamera".
+        // Если её нет — берём первую попавшуюся активную камеру в сцене.
+        if (activeCam == null)
+        {
+            Camera[] allCams = FindObjectsOfType<Camera>();
+            foreach (var cam in allCams)
+            {
+                if (cam != null && cam.isActiveAndEnabled)
+                {
+                    activeCam = cam;
+                    break;
+                }
+            }
+        }
+
+        if (activeCam != null)
+        {
+            firstPersonCamera = activeCam.gameObject;
+            Debug.Log($"[CameraManager] firstPersonCamera не задана — использую активную камеру '{activeCam.name}'.");
+        }
+        else
+        {
+            Debug.LogWarning("[CameraManager] firstPersonCamera не задана, и в сцене не найдено ни одной активной камеры!");
+        }
+
+        // Защита от случая, когда обе ссылки указывают на один и тот же GameObject
+        if (firstPersonCamera != null && firstPersonCamera == thirdPersonCamera)
+        {
+            Debug.LogWarning($"[CameraManager] firstPersonCamera и thirdPersonCamera ссылаются на один объект ('{firstPersonCamera.name}'). " +
+                             "Камера будет выключаться при переключении на вид от третьего лица.");
+        }
+    }
+
+    /// <summary>
     /// Вызывается из TrainTrackMarker.OnTriggerEnter, когда поезд проезжает маркер.
     /// </summary>
     public void OnMarkerPassed(TrainTrackMarker marker)
@@ -51,10 +96,9 @@ public class CameraManager : MonoBehaviour
         switch (marker.cameraMode)
         {
             case MarkerCameraMode.FirstPersonOnly:
-                // Уже заблокировано? Ничего не делаем, чтобы не перезаписывать сохранённый вид
                 if (lockedToFirstPerson) return;
 
-                viewBeforeLock = isFirstPerson; // запоминаем текущий вид
+                viewBeforeLock = isFirstPerson;
                 isFirstPerson = true;
                 lockedToFirstPerson = true;
                 ApplyView();
@@ -62,11 +106,10 @@ public class CameraManager : MonoBehaviour
                 break;
 
             case MarkerCameraMode.Both:
-                // Если блок не активен — нечего восстанавливать
                 if (!lockedToFirstPerson) return;
 
                 lockedToFirstPerson = false;
-                isFirstPerson = viewBeforeLock; // возвращаем вид, который был до FirstPersonOnly
+                isFirstPerson = viewBeforeLock;
                 ApplyView();
                 Debug.Log($"[CameraManager] Маркер '{marker.name}' (Both): блок снят, вид восстановлен на {(isFirstPerson ? "1-е" : "3-е")} лицо.");
                 break;
@@ -76,7 +119,8 @@ public class CameraManager : MonoBehaviour
     private void ApplyView()
     {
         if (firstPersonCamera != null) firstPersonCamera.SetActive(isFirstPerson);
-        if (thirdPersonCamera != null) thirdPersonCamera.SetActive(!isFirstPerson);
+        if (thirdPersonCamera != null && thirdPersonCamera != firstPersonCamera)
+            thirdPersonCamera.SetActive(!isFirstPerson);
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
