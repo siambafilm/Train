@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 [AddComponentMenu("Metro/Metro Navigator")]
 [DisallowMultipleComponent]
-[DefaultExecutionOrder(300)] // после MetroLineSwitcher (200) и MetroMapBuilder
+[DefaultExecutionOrder(300)]
 public class MetroNavigator : MonoBehaviour
 {
     public static MetroNavigator Instance { get; private set; }
@@ -29,11 +29,8 @@ public class MetroNavigator : MonoBehaviour
     [Header("Мини-карта")]
     [SerializeField] private Vector2 minimapSize    = new(240, 240);
     [SerializeField] private Vector2 minimapMargin  = new(18, 18);
-    [Tooltip("Отступ содержимого от края рамки (0..1).")]
     [SerializeField, Range(0.5f, 1f)] private float minimapFitPadding = 0.86f;
-    [Tooltip("Уровни зума F5 (множители к базовому fit-scale).")]
     [SerializeField] private float[] minimapZoomLevels = { 1f, 1.4f, 2f, 3f };
-    [Tooltip("Где в мини-карте находится игрок (0.5 = центр).")]
     [SerializeField, Range(0.2f, 0.8f)] private float minimapAnchorX = 0.5f;
     [SerializeField, Range(0.2f, 0.8f)] private float minimapAnchorY = 0.5f;
 
@@ -44,17 +41,21 @@ public class MetroNavigator : MonoBehaviour
     [SerializeField] private float fullZoomMax       = 6f;
     [SerializeField] private float fullZoomStep      = 1.15f;
 
+    [Tooltip("Стартовый зум большой карты (множитель к fit-scale). 1 = вся карта, 2.5 = крупнее.")]
+    [SerializeField] private float fullInitialZoom   = 2.5f;   // ← НОВОЕ
+
     [Header("Анимация / замедление")]
     [SerializeField] private float openDuration  = 0.42f;
     [SerializeField] private float closeDuration = 0.28f;
     [SerializeField, Range(0.001f, 1f)] private float timeScaleOnOpen = 0.05f;
+
+
 
     // ------- Состояние -------
     private MetroMapData data;
     private Canvas canvas;
     private RectTransform rootRect;
 
-    // Мини-карта
     private RectTransform miniPanel;
     private RectTransform miniMaskRect;
     private RectTransform miniContentRoot;
@@ -63,7 +64,6 @@ public class MetroNavigator : MonoBehaviour
     private Image miniBgImage;
     private int miniZoomIndex;
 
-    // Большая карта
     private RectTransform fullBackdrop;
     private Image fullBackdropImage;
     private RectTransform fullPanel;
@@ -80,12 +80,19 @@ public class MetroNavigator : MonoBehaviour
     private bool isTransitioning;
     private float prevTimeScale = 1f;
 
-    // BBox в schematic-координатах
     private Vector2 bboxMin, bboxMax;
     private Vector2 mapCenter => (bboxMin + bboxMax) * 0.5f;
 
     private float miniFitScale = 1f;
     private float fullFitScale = 1f;
+
+    private Vector2 lastMouseLocal;
+
+    // TrainHUD save-state
+    private bool _hudStateSaved;
+    private bool _savedHudDotVisible;
+    private bool _savedHudMenuVisible;
+    private bool _savedHudHotkeyActive;
 
     // ------- Lifecycle -------
 
@@ -118,10 +125,12 @@ public class MetroNavigator : MonoBehaviour
 
         UpdatePlayerTriangle();
 
-        // Во время паузы: мини-карта скрыта, F5/M/зум/драг не работают
+        // Видимость мини-карты: скрыта в паузе, при открытой большой карте и во время переходов.
         bool paused = IsGamePaused();
-        if (miniPanel != null && miniPanel.gameObject.activeSelf == paused)
-            miniPanel.gameObject.SetActive(!paused);
+        bool shouldShowMini = !paused && !isFullOpen && !isTransitioning;
+        if (miniPanel != null && miniPanel.gameObject.activeSelf != shouldShowMini)
+            miniPanel.gameObject.SetActive(shouldShowMini);
+
         if (paused) return;
 
         if (!isFullOpen && Input.GetKeyDown(KeyCode.F5))
@@ -136,7 +145,7 @@ public class MetroNavigator : MonoBehaviour
         if (isFullOpen && !isTransitioning)
             HandleFullInput();
 
-        if (!isFullOpen && !isTransitioning)
+        if (!isFullOpen && !isTransitioning && miniPanel.gameObject.activeSelf)
             UpdateMiniTransform();
     }
 
@@ -178,8 +187,6 @@ public class MetroNavigator : MonoBehaviour
             }
         }
         if (first) { bboxMin = new(-50, -50); bboxMax = new(50, 50); }
-
-        // Защита от нулевой ширины/высоты
         if (bboxMax.x - bboxMin.x < 1f) bboxMax.x = bboxMin.x + 1f;
         if (bboxMax.y - bboxMin.y < 1f) bboxMax.y = bboxMin.y + 1f;
     }
@@ -230,15 +237,13 @@ public class MetroNavigator : MonoBehaviour
 
     private void BuildFull()
     {
-        // Backdrop на весь экран
         fullBackdrop = NewRect("FullBackdrop", rootRect);
         StretchFull(fullBackdrop);
         fullBackdropImage = fullBackdrop.gameObject.AddComponent<Image>();
         fullBackdropImage.color = new Color(backdropColor.r, backdropColor.g, backdropColor.b, 0f);
-        fullBackdropImage.raycastTarget = true; // блокирует клики
+        fullBackdropImage.raycastTarget = true;
         fullBackdrop.gameObject.SetActive(false);
 
-        // Панель (морфится по размеру/позиции при анимации)
         fullPanel = NewRect("FullMapPanel", rootRect);
         fullPanel.anchorMin = fullPanel.anchorMax = new Vector2(0.5f, 0.5f);
         fullPanel.pivot = new Vector2(0.5f, 0.5f);
@@ -261,7 +266,6 @@ public class MetroNavigator : MonoBehaviour
         fullRenderer = BuildRenderer("MapRenderer", fullContentRoot);
         fullTriangle = BuildTriangle("PlayerTriangle", fullContentRoot);
 
-        // Заголовок с названием активной линии
         var titleGO = new GameObject("Title", typeof(RectTransform));
         var titleRect = titleGO.GetComponent<RectTransform>();
         titleRect.SetParent(fullPanel, false);
@@ -310,12 +314,11 @@ public class MetroNavigator : MonoBehaviour
         var rt = NewRect(name, parent);
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(10, 10);
+        // ОГРОМНЫЙ rect — Unity-овский куллинг Graphic-а идёт по rect, а не по вершинам.
+        // Маленький rect (10×10) выпадал из вьюпорта при зуме/пане → весь меш переставал рисоваться.
+        rt.sizeDelta = new Vector2(100000, 100000);
         rt.anchoredPosition = Vector2.zero;
 
-        // В некоторых версиях Unity AddComponent<CustomGraphic> не подтягивает
-        // [RequireComponent(typeof(CanvasRenderer))] из базового абстрактного класса.
-        // Добавляем явно, чтобы MaskableGraphic не падал при работе RectMask2D.
         if (rt.gameObject.GetComponent<CanvasRenderer>() == null)
             rt.gameObject.AddComponent<CanvasRenderer>();
 
@@ -385,21 +388,13 @@ public class MetroNavigator : MonoBehaviour
         fullRenderer.activeLineId = id;
         fullRenderer.SetVerticesDirty();
 
-        // Название линии
         foreach (var l in data.lines)
             if (l.id == id) { fullTitle.text = string.IsNullOrEmpty(l.name) ? l.id : l.name; break; }
 
-        // Fit-scales
         miniFitScale = ComputeFitScale(minimapSize.x * minimapFitPadding, minimapSize.y * minimapFitPadding);
         fullFitScale = ComputeFitScale(GetFullFrameWidth() * fullFitPadding, GetFullFrameHeight() * fullFitPadding);
 
         if (!isFullOpen && !isTransitioning) UpdateMiniTransform();
-    }
-
-    private void RefreshRendererColors()
-    {
-        miniRenderer.RefreshColors();
-        fullRenderer.RefreshColors();
     }
 
     private float ComputeFitScale(float w, float h)
@@ -425,20 +420,26 @@ public class MetroNavigator : MonoBehaviour
     {
         if (miniContentRoot == null) return;
         float scale = miniFitScale * minimapZoomLevels[miniZoomIndex];
+
+        // Навигаторский режим: карта вращается так, чтобы треугольник игрока смотрел вверх.
+        float angle = GetPlayerAngle();
+        Quaternion rot = Quaternion.Euler(0, 0, -angle);
+
+        miniContentRoot.localRotation = rot;
         miniContentRoot.localScale = Vector3.one * scale;
 
-        // Желаемая позиция игрока в мини-маске
         Vector2 maskSize = miniMaskRect.rect.size;
         Vector2 desired = new(
             (minimapAnchorX - 0.5f) * maskSize.x,
             (minimapAnchorY - 0.5f) * maskSize.y);
 
-        Vector2 ps = GetPlayerSchematicPosition(); // уже snapped
-        Vector2 contentPos = desired - ps * scale;
+        Vector2 ps = GetPlayerSchematicPosition();
+        Vector3 rotatedPs = rot * new Vector3(ps.x * scale, ps.y * scale, 0f);
+        Vector2 contentPos = desired - new Vector2(rotatedPs.x, rotatedPs.y);
         miniContentRoot.localPosition = contentPos;
     }
 
-    // ------- Получение позиции игрока -------
+    // ------- Получение позиции / угла игрока -------
 
     private Vector2 GetPlayerSchematicPosition()
     {
@@ -463,6 +464,23 @@ public class MetroNavigator : MonoBehaviour
         }
         world = Vector3.zero;
         return false;
+    }
+
+    private Vector3 GetPlayerWorldForward()
+    {
+        if (lineSwitcher != null && lineSwitcher.CurrentTrain != null)
+            return lineSwitcher.CurrentTrain.transform.forward;
+        if (playerCamera != null)
+            return playerCamera.transform.forward;
+        return Vector3.forward;
+    }
+
+    private float GetPlayerAngle()
+    {
+        Vector3 fwdWorld = GetPlayerWorldForward();
+        Vector2 fwd = new(fwdWorld.x, -fwdWorld.z);
+        if (fwd.sqrMagnitude < 0.0001f) return 0f;
+        return Mathf.Atan2(fwd.y, fwd.x) * Mathf.Rad2Deg - 90f;
     }
 
     private Vector2 SnapToActiveLine(Vector2 p)
@@ -493,17 +511,11 @@ public class MetroNavigator : MonoBehaviour
     private void UpdatePlayerTriangle()
     {
         Vector2 ps = GetPlayerSchematicPosition();
+        float angle = GetPlayerAngle();
 
-        // Угол по направлению поезда
-        Vector3 fwdWorld = Vector3.forward;
-        if (lineSwitcher != null && lineSwitcher.CurrentTrain != null)
-            fwdWorld = lineSwitcher.CurrentTrain.transform.forward;
-        else if (playerCamera != null)
-            fwdWorld = playerCamera.transform.forward;
-
-        Vector2 fwd = new(fwdWorld.x, -fwdWorld.z);
-        float angle = Mathf.Atan2(fwd.y, fwd.x) * Mathf.Rad2Deg - 90f;
-
+        // Треугольник всегда локально повёрнут на angle.
+        // На мини-карте Content повёрнут на -angle → на экране треугольник смотрит вверх.
+        // На большой карте Content не повёрнут → треугольник честно вращается.
         if (miniTriangle != null)
         {
             miniTriangle.anchoredPosition = ps;
@@ -520,7 +532,6 @@ public class MetroNavigator : MonoBehaviour
 
     private void HandleFullInput()
     {
-        // Панорамирование
         if (Input.GetMouseButtonDown(0))
         {
             isDragging = true;
@@ -540,7 +551,6 @@ public class MetroNavigator : MonoBehaviour
             }
         }
 
-        // Зум к курсору
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if (Mathf.Abs(scroll) > 0.001f)
         {
@@ -561,8 +571,6 @@ public class MetroNavigator : MonoBehaviour
         }
     }
 
-    private Vector2 lastMouseLocal;
-
     // ------- Анимации открытия/закрытия -------
 
     private IEnumerator AnimateOpen()
@@ -576,7 +584,8 @@ public class MetroNavigator : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        // Рект мини-карты в локале rootRect
+        HideOtherUI();
+
         Vector2 miniCenterLocal = GetMiniCenterInRoot();
         Vector2 miniSize = miniPanel.rect.size;
 
@@ -591,11 +600,28 @@ public class MetroNavigator : MonoBehaviour
         Vector2 endPos  = Vector2.zero;
 
         float startScale = miniFitScale * minimapZoomLevels[Mathf.Clamp(miniZoomIndex, 0, minimapZoomLevels.Length - 1)];
-        float endScale   = fullFitScale;
+        
+        // НОВОЕ: финальный зум = fit-scale * fullInitialZoom
+        fullZoom = Mathf.Clamp(fullInitialZoom, fullZoomMin, fullZoomMax);
+        float endScale = fullFitScale * fullZoom;
+
+        float startAngle = GetPlayerAngle();
+        Quaternion startRot = Quaternion.Euler(0, 0, -startAngle);
+        Quaternion endRot   = Quaternion.identity;
+
+        Vector2 psAtStart = GetPlayerSchematicPosition();
+        Vector3 rPsStart = startRot * new Vector3(psAtStart.x * startScale, psAtStart.y * startScale, 0f);
+        Vector2 startContentPos = -new Vector2(rPsStart.x, rPsStart.y);
+        
+        // НОВОЕ: финальный центр — не весь mapCenter, а игрок (как в навигаторе после открытия)
+        // Если хотите по центру карты — оставьте -mapCenter * endScale
+        Vector3 rPsEnd = endRot * new Vector3(psAtStart.x * endScale, psAtStart.y * endScale, 0f);
+        Vector2 endContentPos = -new Vector2(rPsEnd.x, rPsEnd.y);
 
         fullZoom = 1f;
         fullContentRoot.localScale = Vector3.one * startScale;
-        fullContentRoot.localPosition = -mapCenter * startScale;
+        fullContentRoot.localRotation = startRot;
+        fullContentRoot.localPosition = startContentPos;
 
         float t = 0;
         while (t < 1)
@@ -612,7 +638,8 @@ public class MetroNavigator : MonoBehaviour
 
             float sc = Mathf.Lerp(startScale, endScale, e);
             fullContentRoot.localScale = Vector3.one * sc;
-            fullContentRoot.localPosition = -mapCenter * sc;
+            fullContentRoot.localRotation = Quaternion.Slerp(startRot, endRot, e);
+            fullContentRoot.localPosition = Vector2.Lerp(startContentPos, endContentPos, e);
 
             yield return null;
         }
@@ -622,7 +649,8 @@ public class MetroNavigator : MonoBehaviour
         fullBackdropImage.color = backdropColor;
         fullBgImage.color = fullMapBackground;
         fullContentRoot.localScale = Vector3.one * endScale;
-        fullContentRoot.localPosition = -mapCenter * endScale;
+        fullContentRoot.localRotation = Quaternion.identity;
+        fullContentRoot.localPosition = endContentPos;
 
         isTransitioning = false;
     }
@@ -640,11 +668,17 @@ public class MetroNavigator : MonoBehaviour
         float startScale = fullContentRoot.localScale.x;
         float endScale   = miniFitScale * minimapZoomLevels[Mathf.Clamp(miniZoomIndex, 0, minimapZoomLevels.Length - 1)];
 
+        Quaternion startRot = fullContentRoot.localRotation;
+        float endAngle = GetPlayerAngle();
+        Quaternion endRot = Quaternion.Euler(0, 0, -endAngle);
+
+        Vector2 startContentPos = fullContentRoot.localPosition;
+        Vector2 psAtEnd = GetPlayerSchematicPosition();
+        Vector3 rPsEnd = endRot * new Vector3(psAtEnd.x * endScale, psAtEnd.y * endScale, 0f);
+        Vector2 endContentPos = -new Vector2(rPsEnd.x, rPsEnd.y);
+
         Color startBackdrop = fullBackdropImage.color;
         Color startBg       = fullBgImage.color;
-
-        // Центр, вокруг которого уменьшаем — сдвигаем плавно к mapCenter
-        Vector2 currentCenter = mapCenter;
 
         float t = 0;
         while (t < 1)
@@ -661,7 +695,8 @@ public class MetroNavigator : MonoBehaviour
 
             float sc = Mathf.Lerp(startScale, endScale, e);
             fullContentRoot.localScale = Vector3.one * sc;
-            fullContentRoot.localPosition = -currentCenter * sc;
+            fullContentRoot.localRotation = Quaternion.Slerp(startRot, endRot, e);
+            fullContentRoot.localPosition = Vector2.Lerp(startContentPos, endContentPos, e);
 
             yield return null;
         }
@@ -677,11 +712,11 @@ public class MetroNavigator : MonoBehaviour
         isFullOpen = false;
         isTransitioning = false;
         UpdateMiniTransform();
+        RestoreOtherUI();
     }
 
     private Vector2 GetMiniCenterInRoot()
     {
-        // miniPanel — direct child rootRect, анкор top-right. Считаем через мировые корнеры.
         Vector3[] corners = new Vector3[4];
         miniPanel.GetWorldCorners(corners);
         Vector2 centerWorld = (corners[0] + corners[2]) * 0.5f;
@@ -693,4 +728,33 @@ public class MetroNavigator : MonoBehaviour
 
     private static float EaseOutCubic(float t) => 1f - Mathf.Pow(1f - t, 3f);
     private static float EaseInCubic(float t)  => t * t * t;
+
+    // ------- Скрытие других UI (по образцу PauseMenuController) -------
+
+    private void HideOtherUI()
+    {
+        var hud = TrainHUD.Instance;
+        if (hud == null) return;
+
+        _savedHudDotVisible   = hud.IsDotVisible;
+        _savedHudMenuVisible  = hud.IsMenuVisible;
+        _savedHudHotkeyActive = hud.HotkeyEnabled;
+        _hudStateSaved        = true;
+
+        hud.SetHotkeyActive(false);
+        hud.HideAll();
+    }
+
+    private void RestoreOtherUI()
+    {
+        if (!_hudStateSaved) return;
+        _hudStateSaved = false;
+
+        var hud = TrainHUD.Instance;
+        if (hud == null) return;
+
+        hud.SetDotVisible(_savedHudDotVisible);
+        hud.SetMenuVisible(_savedHudMenuVisible);
+        hud.SetHotkeyActive(_savedHudHotkeyActive);
+    }
 }
