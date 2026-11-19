@@ -15,8 +15,8 @@ public class MetroMapRenderer : MaskableGraphic
     public float inactiveAlpha     = 0.28f;
 
     [Header("Стиль станций")]
-    public float stationRadius         = 4f;
-    public float transferStationRadius = 7f;
+    public float stationRadius         = 10f;
+    public float transferStationRadius = 15f;
     public float transferStationBorder = 2f;
     public Color transferStationFill   = Color.white;
 

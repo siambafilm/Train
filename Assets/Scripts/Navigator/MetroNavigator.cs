@@ -49,6 +49,26 @@ public class MetroNavigator : MonoBehaviour
     [SerializeField] private float closeDuration = 0.28f;
     [SerializeField, Range(0.001f, 1f)] private float timeScaleOnOpen = 0.05f;
 
+    [Header("Анонс станций (бегущая строка)")]
+    [SerializeField] private bool enableStationAnnouncement = true;
+    [SerializeField, Tooltip("Радиус срабатывания в мировых единицах (метрах)")]
+    private float stationAnnounceRadius = 200f;
+    [SerializeField, Tooltip("Кулдаун между разными анонсами, сек (по unscaledTime)")]
+    private float stationAnnounceCooldown = 2f;
+    [SerializeField, Tooltip("Формат текста: {0} — название станции")]
+    private string stationAnnounceFormat = "Станция: {0}";
+    [SerializeField, Tooltip("Анонсировать только станции активной линии")]
+    private bool announceOnlyActiveLine = true;
+    [SerializeField, Tooltip("Интервал проверки, сек")]
+    private float announceCheckInterval = 0.1f;
+    [SerializeField, Tooltip("Скорость прокрутки тикера для анонса, px/сек")]
+    private float announceTickerSpeed = 400f;
+
+    // состояние анонсера
+    private StationData _lastAnnouncedStation;
+    private float _lastAnnounceTime = -999f;
+    private float _nextAnnounceCheck;
+
 
 
     // ------- Состояние -------
@@ -132,6 +152,9 @@ public class MetroNavigator : MonoBehaviour
             miniPanel.gameObject.SetActive(shouldShowMini);
 
         if (paused) return;
+
+        if (!isFullOpen && !isTransitioning)
+            UpdateStationAnnouncement();
 
         if (!isFullOpen && Input.GetKeyDown(KeyCode.F5))
             CycleMiniZoom();
@@ -775,5 +798,73 @@ public class MetroNavigator : MonoBehaviour
         hud.SetDotVisible(_savedHudDotVisible);
         hud.SetMenuVisible(_savedHudMenuVisible);
         hud.SetHotkeyActive(_savedHudHotkeyActive);
+    }
+
+    // ------- Анонс станций -------
+
+    private void UpdateStationAnnouncement()
+    {
+        if (!enableStationAnnouncement || data == null) return;
+        if (Time.unscaledTime < _nextAnnounceCheck) return;
+        _nextAnnounceCheck = Time.unscaledTime + Mathf.Max(0.02f, announceCheckInterval);
+
+        if (!TryGetPlayerWorld(out Vector3 world)) return;
+
+        float s = (data.settings != null && data.settings.schematicScale > 0.0001f)
+            ? data.settings.schematicScale
+            : 0.05f;
+        Vector2 playerSche = new(world.x / s, -world.z / s);
+
+        // Радиус в схемных единицах (world -> sche = делим на s)
+        float radiusSche   = announceTickerSpeed > 0 ? stationAnnounceRadius / s : stationAnnounceRadius / s;
+        float radiusScheSq = radiusSche * radiusSche;
+
+        string activeId = lineSwitcher != null ? lineSwitcher.CurrentLineId : null;
+
+        StationData nearest  = null;
+        LineData    nearestLn = null;
+        float       nearestD2 = float.MaxValue;
+
+        foreach (var line in data.lines)
+        {
+            if (line.stations == null) continue;
+            if (announceOnlyActiveLine && !string.IsNullOrEmpty(activeId) && line.id != activeId) continue;
+
+            foreach (var st in line.stations)
+            {
+                if (st?.pos == null || st.pos.Length < 2) continue;
+                Vector2 sp = new(st.pos[0], st.pos[1]);
+                float d2 = (sp - playerSche).sqrMagnitude;
+                if (d2 < nearestD2) { nearestD2 = d2; nearest = st; nearestLn = line; }
+            }
+        }
+
+        if (nearest == null) return;
+
+        // Снаружи всех радиусов — сбрасываем «последнюю», чтобы повторный вход сработал
+        if (nearestD2 > radiusScheSq)
+        {
+            _lastAnnouncedStation = null;
+            return;
+        }
+
+        // Та же станция — не спамим
+        if (_lastAnnouncedStation == nearest) return;
+
+        // Кулдаун между разными станциями
+        if (Time.unscaledTime - _lastAnnounceTime < stationAnnounceCooldown) return;
+
+        _lastAnnouncedStation = nearest;
+        _lastAnnounceTime     = Time.unscaledTime;
+
+        string stName = !string.IsNullOrEmpty(nearest.name)
+            ? nearest.name
+            : (nearestLn != null && !string.IsNullOrEmpty(nearestLn.name) ? nearestLn.name : "Станция");
+
+        string msg = string.IsNullOrEmpty(stationAnnounceFormat)
+            ? stName
+            : string.Format(stationAnnounceFormat, stName);
+
+        NewsTicker.Show(msg, 1, announceTickerSpeed);
     }
 }
