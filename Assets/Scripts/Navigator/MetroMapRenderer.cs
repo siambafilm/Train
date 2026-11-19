@@ -20,6 +20,13 @@ public class MetroMapRenderer : MaskableGraphic
     public float transferStationBorder = 2f;
     public Color transferStationFill   = Color.white;
 
+    [Header("Стиль депо")]
+    [Tooltip("Половина длины перпендикулярной перекладины 'T' депо (схемные единицы)")]
+    public float depotBarHalfLength = 15f;
+
+    [Tooltip("Множитель толщины перекладины депо относительно толщины линии")]
+    public float depotBarThicknessMultiplier = 1.5f;
+
     private readonly Dictionary<string, Color> colorMap = new();
 
     public void RefreshColors()
@@ -50,6 +57,7 @@ public class MetroMapRenderer : MaskableGraphic
             if (line.id == activeLineId) continue;
             if (line.stations == null || line.stations.Length < 2) continue;
             Color c = GetLineColor(line); c.a = inactiveAlpha;
+            DrawDepots(vh, line, c, inactiveThickness);   // ← ДОБАВЛЕНО
             DrawPolyline(vh, line, c, inactiveThickness);
             DrawStations(vh, line, c, false);
         }
@@ -60,6 +68,7 @@ public class MetroMapRenderer : MaskableGraphic
             if (line.id != activeLineId) continue;
             if (line.stations == null || line.stations.Length < 2) continue;
             Color c = GetLineColor(line); c.a = activeAlpha;
+            DrawDepots(vh, line, c, activeThickness);     // ← ДОБАВЛЕНО
             DrawPolyline(vh, line, c, activeThickness);
             DrawStations(vh, line, c, true);
         }
@@ -74,6 +83,63 @@ public class MetroMapRenderer : MaskableGraphic
             Vector2 b = new(pts[i+1].pos[0], pts[i+1].pos[1]);
             AddLineQuad(vh, a, b, thickness, color);
         }
+    }
+
+    // ==========================================================
+    //  DEPOTS ("T"-маркеры на концах линии)
+    // ==========================================================
+
+    private void DrawDepots(VertexHelper vh, LineData line, Color color, float thickness)
+    {
+        if (line?.stations == null || line.stations.Length < 2) return;
+        if (data?.settings == null) return;
+
+        float scale = data.settings.schematicScale;
+        if (scale < 0.0001f) scale = 0.05f;
+
+        // depotOffset хранится в мировых единицах — переводим в схемные
+        float depotOffset = data.settings.depotOffset / scale;
+        if (depotOffset <= 0.0001f) return;
+
+        var pts = line.stations;
+        int n = pts.Length;
+
+        // Депо-начало: за первой станцией (в сторону, противоположную линии)
+        DrawSingleDepot(vh, pts[0],   pts[1],   depotOffset, color, thickness);
+
+        // Депо-конец: за последней станцией (продолжение линии)
+        DrawSingleDepot(vh, pts[n-1], pts[n-2], depotOffset, color, thickness);
+    }
+
+    private void DrawSingleDepot(
+        VertexHelper vh, StationData station, StationData other,
+        float depotOffset, Color color, float thickness)
+    {
+        if (station?.pos == null || station.pos.Length < 2) return;
+        if (other?.pos   == null || other.pos.Length   < 2) return;
+
+        Vector2 s = new(station.pos[0], station.pos[1]);
+        Vector2 o = new(other.pos[0],   other.pos[1]);
+
+        // Направление «наружу» от линии: (station − other).normalized
+        Vector2 outward = s - o;
+        float len = outward.magnitude;
+        if (len < 0.0001f) return;
+        outward /= len;
+
+        Vector2 depotPos = s + outward * depotOffset;
+        Vector2 perp     = new(-outward.y, outward.x);
+
+        // --- Стебель T: от станции до депо ---
+        AddLineQuad(vh, s, depotPos, thickness, color);
+
+        // --- Перекладина T (перпендикулярно к направлению линии) ---
+        float barHalf  = Mathf.Max(1f, depotBarHalfLength);
+        float barThick = thickness * Mathf.Max(1f, depotBarThicknessMultiplier);
+
+        Vector2 barA = depotPos - perp * barHalf;
+        Vector2 barB = depotPos + perp * barHalf;
+        AddLineQuad(vh, barA, barB, barThick, color);
     }
 
     private void DrawStations(VertexHelper vh, LineData line, Color lineColor, bool active)
